@@ -2,6 +2,7 @@ import commonSource from './glsl/common.glsl?raw'
 import feedbackSource from './glsl/feedback.glsl?raw'
 import postSource from './glsl/post.glsl?raw'
 import { waveRows } from './features'
+import type { FootageSource } from './footage'
 import type { Look } from './looks'
 import { drawText } from './text'
 import { type ResolvedParam, type ResolvedScene, type Timeline, evaluatePost } from './timeline'
@@ -83,6 +84,8 @@ export class VideoRenderer {
   private readonly wave: WebGLTexture
   private readonly waveData = new Float32Array(1024)
   private readonly textTexture: WebGLTexture
+  private readonly footageTexture: WebGLTexture
+  private footage: FootageSource | null = null
   private readonly textCanvas: OffscreenCanvas
   private readonly textContext: OffscreenCanvasRenderingContext2D
   private readonly floatTargets: boolean
@@ -107,6 +110,7 @@ export class VideoRenderer {
     this.quad = quad
     this.wave = this.texture(gl.R16F, 512, 2, gl.RED, gl.FLOAT, gl.LINEAR)
     this.textTexture = this.texture(gl.RGBA8, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, gl.LINEAR)
+    this.footageTexture = this.texture(gl.RGBA8, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, gl.LINEAR)
     this.textCanvas = new OffscreenCanvas(1, 1)
     this.textContext = this.textCanvas.getContext('2d')!
   }
@@ -143,6 +147,22 @@ export class VideoRenderer {
     this.lastFrame = -Infinity
   }
 
+  /** Where footage frames come from; without one, footage looks show black. */
+  setFootage(source: FootageSource | null): void {
+    this.footage = source
+  }
+
+  /** Decodes the footage frame t needs, so an export never waits on a frame mid-render. */
+  async prepare(t: number): Promise<void> {
+    const timeline = this.timeline
+    if (!timeline || !this.footage) return
+    const frame = Math.max(0, Math.floor(t * timeline.fps + 1e-6))
+    const at = frame / timeline.fps
+    const scene = timeline.sceneAt(at)
+    const request = timeline.footageAt(at, scene, timeline.scope(at, scene))
+    if (request) await this.footage.prepare(request.fileId, request.seconds)
+  }
+
   /**
    * Renders the frame at time t. Consecutive frames continue the trails; a
    * jump renders a short warm-up first. `force` redraws the same frame after
@@ -173,6 +193,7 @@ export class VideoRenderer {
     }
     gl.deleteTexture(this.wave)
     gl.deleteTexture(this.textTexture)
+    gl.deleteTexture(this.footageTexture)
     gl.deleteVertexArray(this.quad)
     this.scene = null
     this.sceneTarget = null
@@ -220,6 +241,18 @@ export class VideoRenderer {
     set('uPush', timeline.pushAt(t))
     this.int(program, 'uCut', scope.cut)
     gl.uniform2f(this.location(program, 'uRes'), this.width, this.height)
+    gl.activeTexture(gl.TEXTURE3)
+    gl.bindTexture(gl.TEXTURE_2D, this.footageTexture)
+    this.int(program, 'uFootage', 3)
+    const request = this.footage ? timeline.footageAt(t, scene, scope) : null
+    const shot = request ? this.footage!.frame(request.fileId, request.seconds) : null
+    if (shot) {
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE, shot.image)
+      set('uFootAsp', shot.width / shot.height)
+    } else if (request) {
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([0, 0, 0, 255]))
+      set('uFootAsp', 16 / 9)
+    }
 
     let mix = 0
     let lookB = -1

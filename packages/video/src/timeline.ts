@@ -9,6 +9,7 @@ type VideoScene = studio.VideoScene
 type VideoText = studio.VideoText
 type PostKey = studio.PostKey
 type ExprScope = studio.ExprScope
+type FootageClip = studio.FootageClip
 
 // A storyboard resolved against the song: scenes with start and end times,
 // compiled expressions, cut events, and the camera travel integrated over the
@@ -41,6 +42,21 @@ export interface ResolvedScene {
   post: Record<PostKey, ScalarFn>
   /** Cut event times inside the scene. */
   cuts: Float64Array
+  /** Downloaded footage clips the scene plays, in its order. */
+  clips: FootageClip[]
+}
+
+/** Which footage frame a scene shows at a moment. */
+export interface FootageRequest {
+  clip: FootageClip
+  fileId: string
+  /** Seconds into the clip file. */
+  seconds: number
+}
+
+const seeded = (n: number) => {
+  const x = Math.sin(n * 12.9898) * 43758.5453
+  return x - Math.floor(x)
 }
 
 export interface ResolvedText {
@@ -138,7 +154,12 @@ export class Timeline {
         t0,
         t1,
       )
-      this.scenes.push({ scene, index, t0, t1, look, params: look ? resolveParams(look, scene.params, warn) : [], layers, post, cuts })
+      const clips = scene.clips.flatMap((id) => {
+        const clip = board.footage.find((c) => c.id === id)
+        return clip?.status === 'fetched' && clip.fileId ? [clip] : []
+      })
+      if (scene.clips.length && !clips.length) warn(`Scene "${scene.name || scene.look}" has no downloaded footage yet.`)
+      this.scenes.push({ scene, index, t0, t1, look, params: look ? resolveParams(look, scene.params, warn) : [], layers, post, cuts, clips })
     })
 
     for (const item of board.text) {
@@ -242,6 +263,21 @@ export class Timeline {
       scope.cutT = cut > 0 ? t - scene.cuts[cut - 1] : L
     }
     return scope
+  }
+
+  /**
+   * The footage frame a scene shows: each cut moves to the next clip (or a
+   * seeded random one when shuffled), starting at the clip's start point and
+   * playing forward at the clip speed.
+   */
+  footageAt(t: number, scene: ResolvedScene | null, scope: Readonly<Record<string, number>>): FootageRequest | null {
+    if (!scene?.clips.length) return null
+    const { clips } = scene
+    const cut = scope.cut
+    const clip = scene.scene.clipOrder === 'shuffle' ? clips[Math.floor(seeded(scene.index * 1000 + cut + 1) * clips.length) % clips.length] : clips[cut % clips.length]
+    const usable = Math.max(0, clip.duration - clip.skip - 4)
+    const start = scene.scene.clipStart === 'random' ? clip.skip + seeded(scene.index * 7919 + cut + 3) * usable : clip.skip + scene.scene.clipStart
+    return { clip, fileId: clip.fileId!, seconds: start + scope.cutT * scene.scene.clipSpeed }
   }
 
   /** Times of one channel's events, for drawing cue lanes. */

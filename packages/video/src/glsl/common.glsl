@@ -49,3 +49,14 @@ vec3 julia(vec2 z, vec2 c, int maxIt){
   return vec3(sn, trap, inside);
 }
 vec2 juliaC(float a){ return 0.7885*vec2(cos(a), sin(a)); }
+
+// Footage: the current clip frame (RGB) and its aspect ratio.
+uniform sampler2D uFootage;
+uniform float uFootAsp;
+// Samples the footage with a "cover" fit; uv runs -asp..asp across and -1..1 down.
+vec3 footage(vec2 uv){
+  float sa = uRes.x/uRes.y;
+  vec2 q = uv/vec2(sa,1.);
+  if(uFootAsp > sa) q.x *= sa/uFootAsp; else q.y *= uFootAsp/sa;
+  return texture(uFootage, vec2(q.x*.5+.5, .5-q.y*.5)).rgb;
+}

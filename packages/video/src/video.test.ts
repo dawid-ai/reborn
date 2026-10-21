@@ -4,6 +4,7 @@ import { buildCues, pulse } from './cues'
 import { analyzeMix, featureAt, waveRows } from './features'
 import { LOOKS, lookById, parseLook } from './looks'
 import { buildSceneSource } from './renderer'
+import { chapters, footageCredits, keyMoments } from './stills'
 import { Timeline } from './timeline'
 
 function song(): studio.StudioProject {
@@ -63,7 +64,7 @@ describe('cues', () => {
 
 describe('looks', () => {
   it('parses every built-in look header', () => {
-    expect(LOOKS.map((l) => l.id).sort()).toEqual(['acid-vortex', 'grid-tunnel', 'julia-drift', 'neon-kaleido', 'shock-ring', 'star-sparkle', 'strobe-deck', 'vein-tunnel', 'wave-ring'])
+    expect(LOOKS.map((l) => l.id).sort()).toEqual(['acid-vortex', 'footage-grade', 'footage-kaleido', 'grid-tunnel', 'julia-drift', 'neon-kaleido', 'shock-ring', 'star-sparkle', 'strobe-deck', 'vein-tunnel', 'wave-ring'])
     const vein = lookById('vein-tunnel')!
     expect(vein).toMatchObject({ title: 'Vein Tunnel', layer: false, fits: ['drop', 'heavy'] })
     expect(vein.params.find((p) => p.name === 'colB')).toMatchObject({ default: [0.85, 0.05, 0.18] })
@@ -142,5 +143,63 @@ describe('audio features', () => {
     expect(featureAt(null, 'bass', 1)).toBe(0)
     const rows = waveRows(features, 1.5)
     expect(Math.max(...rows.slice(0, 512))).toBeGreaterThan(0.9)
+  })
+})
+
+describe('footage in scenes', () => {
+  function withFootage() {
+    let project = studio.executeBatch(song(), [
+      { type: 'video.storyboard.create', params: { empty: true } },
+      { type: 'video.storyboard.update', params: { brief: { footage: { enabled: true } } } },
+    ]).project
+    const clip = (sourceId: string, duration: number) => ({ provider: 'pexels', sourceId, title: `Clip ${sourceId}`, page: `https://www.pexels.com/video/${sourceId}/`, author: 'A. Filmer', licence: 'pexels', licenceName: 'Pexels License', url: `https://videos.pexels.com/${sourceId}.mp4`, duration, skip: 0 })
+    const added = studio.execute(project, { type: 'video.footage.add', params: { clips: [clip('1', 20), clip('2', 30)] } })
+    const ids = (added.results[0] as { clipIds: string[] }).clipIds
+    project = added.project
+    for (const [i, id] of ids.entries()) {
+      project = studio.executeBatch(project, [
+        { type: 'video.footage.review', params: { clipId: id, status: 'approved' } },
+        { type: 'video.footage.fetched', params: { clipId: id, file: { id: `vfl_${i}`, kind: 'footage', name: `${i}.mp4`, mimeType: 'video/mp4', bytes: 1, width: 1920, height: 1080, duration: i ? 30 : 20 } } },
+      ]).project
+    }
+    project = studio.execute(project, { type: 'video.scene.add', params: { start: { sectionId: 'Drop' }, look: 'footage-grade', clips: ids, cutOn: ['kick'], clipStart: 2 } }).project
+    return { project, ids }
+  }
+
+  it('moves to the next clip on each cut and plays forward from the start point', () => {
+    const { project } = withFootage()
+    const timeline = new Timeline(project, studio.requireStoryboard(project))
+    const scene = timeline.scenes[0]
+    const first = timeline.footageAt(6.5, scene, timeline.scope(6.5, scene))
+    expect(first).toMatchObject({ fileId: 'vfl_0' })
+    expect(first!.seconds).toBeCloseTo(2.1)
+    const afterCut = scene.cuts[0] + 0.25
+    expect(timeline.footageAt(afterCut, scene, timeline.scope(afterCut, scene))).toMatchObject({ fileId: 'vfl_1', seconds: 2.25 })
+  })
+
+  it('credits only the clips scenes use', () => {
+    const { project } = withFootage()
+    const credits = footageCredits(studio.requireStoryboard(project))
+    expect(credits).toContain('"Clip 1" by A. Filmer (pexels), Pexels License')
+    expect(credits.split(String.fromCharCode(10))).toHaveLength(3)
+  })
+})
+
+describe('look-dev helpers', () => {
+  it('picks a still per scene, impact, and text item, in time order', () => {
+    const project = studio.executeBatch(song(), [
+      { type: 'video.storyboard.create', params: {} },
+      { type: 'video.text.add', params: { start: { sectionId: 'Drop', bars: 1 }, text: 'TITLE' } },
+    ]).project
+    const moments = keyMoments(new Timeline(project, studio.requireStoryboard(project)))
+    // The impact clip sits on the drop's first beat, so they share a still.
+    expect(moments.map((m) => m.label)).toEqual(['Build', 'Impact · Drop', 'Text: TITLE'])
+    expect(moments[1].seconds).toBeCloseTo(6.4 + 1 / 30)
+  })
+
+  it('lists sections as chapters starting at 0:00', () => {
+    const project = song()
+    project.sections = project.sections.map((s) => ({ ...s, start: s.start + 2 }))
+    expect(chapters(project)).toBe(['0:00 Intro', '0:03 Build', '0:09 Drop'].join(String.fromCharCode(10)))
   })
 })

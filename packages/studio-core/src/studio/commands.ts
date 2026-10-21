@@ -61,6 +61,7 @@ import {
   updateTrack,
   writeAutomation,
 } from './ops'
+import { VIDEO_SPECS } from './video-commands'
 
 // Typed command registry shared by the UI, keyboard shortcuts, CLI, local
 // API, MCP, and agents. Each command validates its parameters, applies a pure
@@ -1045,7 +1046,9 @@ function mapMicro(pattern: Pattern, fn: (micro: number, step: number) => number)
   return { ...pattern, hits: pattern.hits.map((h) => ({ ...h, micro: fn(h.micro, h.step) })) }
 }
 
-export const COMMANDS: ReadonlyMap<string, CommandSpec> = new Map(SPECS.map((spec) => [spec.type, spec]))
+const ALL_SPECS: CommandSpec[] = [...SPECS, ...VIDEO_SPECS]
+
+export const COMMANDS: ReadonlyMap<string, CommandSpec> = new Map(ALL_SPECS.map((spec) => [spec.type, spec]))
 
 export function validateParams(spec: CommandSpec, params: Record<string, unknown> = {}): Record<string, unknown> {
   const unknown = Object.keys(params).filter((key) => !(key in spec.params))
@@ -1160,5 +1163,5 @@ export function commandJsonSchema(spec: CommandSpec): Record<string, unknown> {
 }
 
 export function listCommands(): { type: string; summary: string; mutates: boolean; schema: Record<string, unknown> }[] {
-  return SPECS.map((spec) => ({ type: spec.type, summary: spec.summary, mutates: spec.mutates, schema: commandJsonSchema(spec) }))
+  return ALL_SPECS.map((spec) => ({ type: spec.type, summary: spec.summary, mutates: spec.mutates, schema: commandJsonSchema(spec) }))
 }

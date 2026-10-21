@@ -3,6 +3,8 @@
 // natural units (dB, semitones, seconds) or normalized 0..1 as each
 // parameter's spec declares.
 
+import type { VideoState } from './video'
+
 export const STUDIO_SCHEMA = 'reborn-studio'
 export const STUDIO_VERSION = 1
 
@@ -408,6 +410,8 @@ export interface StudioProject {
   automation: AutomationLane[]
   assets: Record<string, Asset>
   audit: AuditEntry[]
+  /** Music video storyboards. Absent until the first storyboard is created. */
+  video?: VideoState
 }
 
 // ---------------------------------------------------------------------------

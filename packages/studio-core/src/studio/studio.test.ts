@@ -436,6 +436,9 @@ describe('every command', () => {
       'pad.hit', 'pad.record', 'clip.create', 'clip.move', 'clip.resize', 'clip.duplicate', 'clip.delete', 'clip.makeUnique', 'clip.split', 'clip.set', 'clip.loop', 'clip.copy', 'clip.paste', 'time.insert', 'time.delete',
       'section.add', 'section.update', 'section.remove', 'scene.add', 'scene.set', 'scene.remove', 'scene.record', 'automation.write', 'automation.clear',
       'pattern.quantize', 'groove.apply', 'macro.map',
+      // Video commands are exercised in video.test.ts.
+      'video.reference', 'video.get', 'video.storyboard.create', 'video.storyboard.update', 'video.storyboard.activate', 'video.storyboard.duplicate', 'video.storyboard.remove',
+      'video.scene.add', 'video.scene.update', 'video.scene.remove', 'video.text.add', 'video.text.update', 'video.text.remove',
     ]
     expect([...COMMANDS.keys()].sort()).toEqual([...covered].sort())
   })

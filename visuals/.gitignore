@@ -1,6 +1,0 @@
-footage-cache/
-.keys.json
-*.npz
-stills/
-renders/
-__pycache__/

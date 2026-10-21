@@ -16,7 +16,8 @@ The app checks for updates at launch and asks before it downloads one. See the [
 ## What's inside
 
 - **Devices:** two Acid synths, the Wave synth, 808 and 909 drum machines, a sampler with slicing, audio tracks, and two decks.
-- **Four views:** **Arrange** for the song, **Build** for launching scenes live, **Mix** for levels, sends, returns, and groups, and **Perform** for macros, effects throws, and decks.
+- **Five views:** **Arrange** for the song, **Build** for launching scenes live, **Mix** for levels, sends, returns, and groups, **Perform** for macros, effects throws, and decks, and **Video** for music videos cut to the song.
+- **Music video:** storyboard a video whose cuts land on the song's real drum hits, risers, and impacts, preview it live, and export an MP4.
 - **Mix analysis:** loudness, true peak, and band energy per section, plus a signal trace that explains what you hear.
 - **Projects:** project folders with autosave, crash recovery, packing, and WAV and stem export. Projects exported from the earlier RE:BORN web edition open too.
 - **MIDI:** play instruments and pads from a controller, and map knobs and buttons with MIDI learn.

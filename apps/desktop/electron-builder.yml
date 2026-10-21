@@ -1,0 +1,56 @@
+# Windows desktop packaging.
+# Signing: set CSC_LINK (path or base64 of a .pfx) and CSC_KEY_PASSWORD to sign;
+# without them the installer is built unsigned.
+appId: ai.dawid.reborn
+# Windows forbids ":" in folder and shortcut names, so packaging uses RE-BORN.
+productName: RE-BORN
+copyright: Copyright © 2026 Dawid
+directories:
+  output: ../../release
+  buildResources: build
+files:
+  - dist/**/*
+  - "!dist/**/*.map"
+  - package.json
+extraResources:
+  - from: ../studio/dist
+    to: studio
+  - from: ../../packages/cli/dist
+    to: cli
+  - from: ../../python/ismail-bridge
+    to: python/ismail-bridge
+    filter:
+      - "**/*"
+      - "!tests/**"
+      - "!**/__pycache__/**"
+      - "!venv/**"
+  - from: ../../THIRD_PARTY_NOTICES.md
+    to: THIRD_PARTY_NOTICES.md
+npmRebuild: false
+asar: true
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  icon: build/icon.png
+  # No version in the name, so the README can link
+  # releases/latest/download/RE-BORN-Setup.exe. latest.yml names this file,
+  # so the updater still finds it.
+  artifactName: RE-BORN-Setup.${ext}
+  # Checking an update's signature needs electron-builder's winCodeSign
+  # bundle, whose symlinks fail to extract without Developer Mode. The build
+  # is unsigned, so turn this back on when CSC_LINK signing is set up.
+  verifyUpdateCodeSignature: false
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  shortcutName: RE-BORN
+publish:
+  provider: github
+  owner: dawid-ai
+  repo: reborn
+  # Publish directly: electron-updater can't see draft releases. The release
+  # workflow creates the release with its notes first; see release.yml.
+  releaseType: release

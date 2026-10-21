@@ -1,0 +1,13 @@
+{
+  "name": "@reborn/desktop",
+  "productName": "RE:BORN",
+  "version": "2.1.0",
+  "private": true,
+  "main": "dist/main.cjs",
+  "type": "module",
+  "devDependencies": {
+    "@reborn/studio-core": "2.0.0-dev"
+  },
+  "description": "RE:BORN desktop workstation",
+  "author": "Dawid"
+}

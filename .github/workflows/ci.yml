@@ -1,0 +1,74 @@
+name: CI
+
+# Runs on every push to main and every pull request. The release workflow
+# calls it too, so a tag publishes only after the same checks pass.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  desktop:
+    name: Build, unit tests, and desktop end-to-end
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - run: python -m pip install numpy
+      - run: npm ci
+      # Type-checks every workspace and builds the studio, CLI, and Electron
+      # main and preload.
+      - run: npm run build
+      - run: npm test
+      - run: python -m unittest discover -s python/ismail-bridge/tests
+      # Playback, save, export, pack, reopen, CLI and MCP editing, the update
+      # prompt, sidecar restarts, and crash recovery.
+      - run: node scripts/desktop-smoke.mjs
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: desktop-smoke
+          path: artifacts/desktop-e2e
+          retention-days: 14
+
+  studio:
+    name: Studio end-to-end and audits
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install chromium
+      - name: Start the studio dev server
+        shell: bash
+        run: |
+          mkdir -p artifacts
+          nohup npm run studio > artifacts/studio-server.log 2>&1 &
+          for i in $(seq 1 60); do
+            curl -sf -o /dev/null http://127.0.0.1:5175/ && exit 0
+            sleep 1
+          done
+          cat artifacts/studio-server.log
+          exit 1
+      - run: node scripts/studio-smoke.mjs
+      - run: npm run audit:a11y
+      - run: npm run audit:audio
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: studio
+          path: artifacts
+          retention-days: 14

@@ -1,0 +1,12 @@
+{
+  "name": "@reborn/studio-core",
+  "version": "2.0.0-dev",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./platform": "./src/platform.ts",
+    "./studio": "./src/studio/index.ts",
+    "./api": "./src/api.ts"
+  }
+}

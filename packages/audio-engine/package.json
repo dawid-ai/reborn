@@ -1,0 +1,14 @@
+{
+  "name": "@reborn/audio-engine",
+  "version": "2.0.0-dev",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./studio": "./src/studio/index.ts"
+  },
+  "dependencies": {
+    "@reborn/studio-core": "2.0.0-dev",
+    "@reborn/analysis": "2.0.0-dev"
+  }
+}

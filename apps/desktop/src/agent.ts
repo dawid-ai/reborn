@@ -2,7 +2,7 @@ import { type ChildProcess, spawn, spawnSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import type { AgentActivity, AgentCompleteRequest, AgentCompleteResponse, AgentContent, AgentSettings } from '@reborn/studio-core'
+import type { AgentActivity, AgentCompleteRequest, AgentCompleteResponse, AgentContent, AgentResultPart, AgentSettings } from '@reborn/studio-core'
 import { writeAtomic } from './project-dir'
 
 // Provider adapters for the in-app agent. The renderer runs the tool loop;
@@ -228,7 +228,7 @@ export async function anthropicComplete(fetchImpl: typeof fetch, apiKey: string,
   const response = await fetchImpl(`${baseUrl}/v1/messages`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
-    body: JSON.stringify({ model, max_tokens: request.maxTokens ?? 2048, system: request.system, messages: request.messages, tools: request.tools }),
+    body: JSON.stringify({ model, max_tokens: request.maxTokens ?? 2048, system: request.system, messages: toAnthropicMessages(request), tools: request.tools }),
   })
   if (!response.ok) throw await failed(response, 'The Claude API')
   const body = (await response.json()) as { content: { type: string; text?: string; id?: string; name?: string; input?: Record<string, unknown> }[]; stop_reason: string }
@@ -240,9 +240,27 @@ export async function anthropicComplete(fetchImpl: typeof fetch, apiKey: string,
   return { content, stopReason: body.stop_reason }
 }
 
+/** Tool results with images become the Messages API's image blocks. */
+export function toAnthropicMessages(request: AgentCompleteRequest): unknown[] {
+  return request.messages.map((message) => ({
+    role: message.role,
+    content: message.content.map((block) => {
+      if (block.type !== 'tool_result' || typeof block.content === 'string') return block
+      return {
+        ...block,
+        content: block.content.map((part) => (part.type === 'text' ? part : { type: 'image', source: { type: 'base64', media_type: part.mediaType, data: part.data } })),
+      }
+    }),
+  }))
+}
+
+const resultText = (content: string | AgentResultPart[]) => (typeof content === 'string' ? content : content.filter((p) => p.type === 'text').map((p) => (p as { text: string }).text).join('\n'))
+
+type OpenAiPart = { type: 'text'; text: string } | { type: 'image_url'; image_url: { url: string } }
+
 interface OpenAiMessage {
   role: 'system' | 'user' | 'assistant' | 'tool'
-  content: string | null
+  content: string | OpenAiPart[] | null
   tool_calls?: { id: string; type: 'function'; function: { name: string; arguments: string } }[]
   tool_call_id?: string
 }
@@ -258,9 +276,14 @@ export function toOpenAiMessages(request: AgentCompleteRequest): OpenAiMessage[]
       continue
     }
     const text = message.content.filter((c) => c.type === 'text').map((c) => (c as { text: string }).text).join('\n')
+    const images: OpenAiPart[] = []
     for (const result of message.content.filter((c) => c.type === 'tool_result') as Extract<AgentContent, { type: 'tool_result' }>[]) {
-      messages.push({ role: 'tool', tool_call_id: result.tool_use_id, content: result.is_error ? `Error: ${result.content}` : result.content })
+      const content = resultText(result.content)
+      messages.push({ role: 'tool', tool_call_id: result.tool_use_id, content: result.is_error ? `Error: ${content}` : content })
+      // Tool messages carry only text; images follow in a user message.
+      if (typeof result.content !== 'string') for (const part of result.content) if (part.type === 'image') images.push({ type: 'image_url', image_url: { url: `data:${part.mediaType};base64,${part.data}` } })
     }
+    if (images.length) messages.push({ role: 'user', content: [{ type: 'text', text: 'Images from the tool results above.' }, ...images] })
     if (text) messages.push({ role: 'user', content: text })
   }
   return messages
@@ -283,7 +306,7 @@ export async function openAiComplete(fetchImpl: typeof fetch, baseUrl: string, a
   const choice = body.choices?.[0]
   if (!choice) throw new Error('The model server returned no answer.')
   const content: AgentContent[] = []
-  if (choice.message.content) content.push({ type: 'text', text: choice.message.content })
+  if (typeof choice.message.content === 'string' && choice.message.content) content.push({ type: 'text', text: choice.message.content })
   for (const call of choice.message.tool_calls ?? []) {
     let input: Record<string, unknown> = {}
     try {

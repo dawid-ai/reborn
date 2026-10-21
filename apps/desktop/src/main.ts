@@ -368,10 +368,13 @@ function registerIpc() {
   handle(IPC.agentSettings, () => agent.settings())
   handle(IPC.agentSetSettings, (patch: Parameters<AgentService['update']>[0]) => agent.update(patch ?? {}))
   handle(IPC.agentComplete, (request: Parameters<AgentService['complete']>[0]) => agent.complete(request))
-  handle(IPC.agentRunCli, async (prompt: string) => {
+  handle(IPC.agentRunCli, async (prompt: string, role: unknown) => {
     if (!api) throw new Error('The local API is not running, so the Claude CLI cannot reach RE:BORN.')
     if (!existsSync(CLI_BUNDLE)) throw new Error('The reborn MCP bundle is missing. Run npm run cli:build.')
-    return agent.runCli(String(prompt), { command: process.execPath, args: [CLI_BUNDLE, 'mcp'], env: { ELECTRON_RUN_AS_NODE: '1', REBORN_API_FILE: api.file } }, app.getPath('temp'), {
+    const director = role === 'director'
+    // The Director works through stages with renders, so it gets longer.
+    return agent.runCli(String(prompt), { command: process.execPath, args: [CLI_BUNDLE, 'mcp', '--role', director ? 'director' : 'composer'], env: { ELECTRON_RUN_AS_NODE: '1', REBORN_API_FILE: api.file } }, app.getPath('temp'), {
+      timeoutMs: director ? 60 * 60_000 : undefined,
       onActivity: (activity) => mainWindow?.webContents.send(IPC.agentActivity, activity),
     })
   })

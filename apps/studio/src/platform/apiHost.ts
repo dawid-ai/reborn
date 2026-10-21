@@ -1,6 +1,7 @@
 import { type ApiRpcRequest, type ExecuteRequest, type RuntimeRequest, studio } from '@reborn/studio-core'
 import { encodeWav, renderStems, renderStudio } from '@reborn/audio-engine/studio'
 import { loadAgentSettings } from '../agent/agent'
+import { runDirectorTool } from '../agent/director'
 import { runAnalysis, summarizeReport } from '../audio/analysis'
 import { engine } from '../audio/host'
 import { refreshIsmail, runGenerate, runSeparate } from '../audio/ismail'
@@ -56,15 +57,23 @@ async function handle(request: ApiRpcRequest): Promise<Reply> {
   }
   if (request.route === 'execute') {
     const body = request.body as ExecuteRequest
-    const commands = body.commands ?? []
+    let commands = body.commands ?? []
     const mutating = commands.some((c) => studio.COMMANDS.get(c.type)?.mutates)
+    // Agents get one domain each; agents that don't say which are the Composer.
+    const role = body.origin === 'agent' ? (body.role === 'director' ? 'director' : 'composer') : null
     try {
+      if (role) commands = studio.checkRoleCommands(role, commands)
       if (!mutating) {
         const outcome = studio.executeBatch(s.project, commands)
         return { status: 200, body: { revision: s.project.revision, results: outcome.results, changed: false, status: 'read' } }
       }
       if (body.expectedRevision !== undefined && body.expectedRevision !== s.project.revision) return error(409, 'conflict', `The project changed (revision ${s.project.revision}, expected ${body.expectedRevision}). Read it again and retry.`)
       const dryRun = studio.executeBatch(s.project, commands, { origin: body.origin === 'agent' ? 'agent' : 'script' })
+      // The Director's storyboard edits apply directly; its stage gates are where the user reviews.
+      if (role === 'director') {
+        const results = dispatch(commands, { origin: 'agent', label: `Director: ${body.intent || body.label || 'video edit'}`, quiet: false })
+        return { status: 200, body: { revision: getState().project.revision, results, changed: true, status: 'applied' } }
+      }
       const agent = body.origin === 'agent' ? await loadAgentSettings().catch(() => null) : null
       if (body.origin === 'agent' && !agent?.directEdits) {
         const proposal = addProposal({
@@ -198,6 +207,15 @@ async function handle(request: ApiRpcRequest): Promise<Reply> {
       } finally {
         job.done()
       }
+    }
+    case 'video.tool': {
+      if (typeof params.name !== 'string') return error(400, 'invalid', 'video.tool needs a tool name.')
+      const outcome = await runDirectorTool(params.name, (params.input as Record<string, unknown>) ?? {})
+      const parts = typeof outcome.content === 'string' ? [{ type: 'text' as const, text: outcome.content }] : outcome.content
+      const text = parts.filter((p) => p.type === 'text').map((p) => (p as { text: string }).text).join('\n')
+      const image = parts.find((p) => p.type === 'image')
+      if (outcome.isError) return error(400, 'invalid', text)
+      return { status: 200, body: { result: { text, ...(image && { image: { mediaType: image.mediaType, data: image.data } }) } } }
     }
     case 'proposal.list':
       return { status: 200, body: { result: s.proposals.map((p) => ({ id: p.id, intent: p.intent, status: p.status, changes: p.changes.length, source: p.source })) } }

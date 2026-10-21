@@ -1,7 +1,7 @@
 import { createInterface } from 'node:readline'
 import type { Readable, Writable } from 'node:stream'
 import type { CommandInfo, RuntimeAction } from '@reborn/studio-core/api'
-import { listCommands } from '@reborn/studio-core/studio'
+import { DIRECTOR_TOOLS, listCommands } from '@reborn/studio-core/studio'
 import type { ApiClient } from './client'
 import { CliError, VERSION, errorMessage } from './errors'
 import { compact } from './format'
@@ -21,13 +21,20 @@ export const MCP_INSTRUCTIONS = [
   'Run render_mix or analysis_run before you make claims about how the mix sounds.',
 ].join(' ')
 
+export const DIRECTOR_INSTRUCTIONS = [
+  'RE:BORN is a music workstation; these tools make a music video for the song open in it.',
+  'You are the Director: you change only the video storyboard, never the music.',
+  'Start with video_brief_get. Work stage by stage (brief, treatment, look-dev, draft, final), answer every open comment, and stop after video_stage_request until the user approves.',
+  'Search the library before building scenes by hand, check scenes with video_stills before rendering, and only propose footage the brief allows; the user approves every clip.',
+].join(' ')
+
 const ERROR = { parse: -32700, invalidRequest: -32600, methodNotFound: -32601, invalidParams: -32602, internal: -32603 } as const
 
 type Json = Record<string, unknown>
 type Id = string | number
 
 export interface ToolResult {
-  content: { type: 'text'; text: string }[]
+  content: ({ type: 'text'; text: string } | { type: 'image'; data: string; mimeType: string })[]
   isError?: true
 }
 
@@ -43,6 +50,8 @@ export interface McpServerOptions {
   /** Connects to the app. Called per tool call, so app restarts are picked up. */
   connect: () => Promise<ApiClient>
   readOnly?: boolean
+  /** composer (default) gets the music tools; director gets the video tools. */
+  role?: 'composer' | 'director'
   log?: (text: string) => void
   pollIntervalMs?: number
   jobTimeoutMs?: number
@@ -121,7 +130,7 @@ export class McpServer {
       case 'initialize': {
         const requested = params.protocolVersion
         const supported = SUPPORTED_PROTOCOL_VERSIONS.find((v) => v === requested) ?? SUPPORTED_PROTOCOL_VERSIONS[0]
-        return { protocolVersion: supported, capabilities: { tools: { listChanged: false } }, serverInfo: { name: 'reborn', version: VERSION }, instructions: MCP_INSTRUCTIONS }
+        return { protocolVersion: supported, capabilities: { tools: { listChanged: false } }, serverInfo: { name: 'reborn', version: VERSION }, instructions: this.options.role === 'director' ? DIRECTOR_INSTRUCTIONS : MCP_INSTRUCTIONS }
       }
       case 'ping':
         return {}
@@ -168,9 +177,12 @@ export class McpServer {
     return this.loading
   }
 
-  private buildTools(commands: readonly CommandInfo[]): Map<string, Tool> {
+  private buildTools(all: readonly CommandInfo[]): Map<string, Tool> {
+    if (this.options.role === 'director') return this.buildDirectorTools()
     const tools = new Map<string, Tool>()
     const add = (tool: Tool) => tools.set(tool.name, tool)
+    // The Composer works on the music; video commands and the user's own decisions stay out.
+    const commands = all.filter((info) => info.domain !== 'video' && !info.userOnly)
     for (const info of commands) {
       if (this.options.readOnly && info.mutates) continue
       const schema = info.mutates ? withIntent(info.schema) : info.schema
@@ -302,12 +314,40 @@ export class McpServer {
     return tools
   }
 
+  /** The Director's tools. Each runs in the app, which checks the Director's role on every edit. */
+  private buildDirectorTools(): Map<string, Tool> {
+    const tools = new Map<string, Tool>()
+    if (this.options.readOnly) return tools
+    for (const spec of DIRECTOR_TOOLS) {
+      tools.set(spec.name, { name: spec.name, description: spec.description, inputSchema: spec.input_schema, annotations: { readOnlyHint: /_get$|_reference$|_cues$|_search$|^project_summary$/.test(spec.name) }, call: (args) => this.callDirectorTool(spec.name, args) })
+    }
+    const empty: Json = { type: 'object', properties: {}, additionalProperties: false }
+    tools.set('transport_play', { name: 'transport_play', description: 'Start playback in RE:BORN.', inputSchema: empty, annotations: { readOnlyHint: false }, call: () => this.callRuntime('transport.play', {}) })
+    tools.set('transport_stop', { name: 'transport_stop', description: 'Stop playback in RE:BORN.', inputSchema: empty, annotations: { readOnlyHint: false }, call: () => this.callRuntime('transport.stop', {}) })
+    return tools
+  }
+
+  private async callDirectorTool(name: string, args: Json): Promise<ToolResult> {
+    const client = await this.options.connect()
+    const response = await client.runtime({ action: 'video.tool', params: { name, input: args } })
+    let result: unknown = response.result
+    if (response.jobId) {
+      const { job, timedOut } = await client.waitForJob(response.jobId, { intervalMs: this.options.pollIntervalMs, timeoutMs: this.options.jobTimeoutMs ?? 3_600_000 })
+      if (timedOut) return text({ status: 'running', jobId: job.id, note: 'Still working. Check RE:BORN, then continue.' })
+      if (job.status !== 'done') return text({ error: job.status, message: job.message ?? `${name} ${job.status}.` }, true)
+      result = job.result
+    }
+    const out = (result ?? {}) as { text?: string; image?: { mediaType: string; data: string } }
+    return { content: [{ type: 'text', text: out.text ?? '' }, ...(out.image ? [{ type: 'image' as const, data: out.image.data, mimeType: out.image.mediaType }] : [])] }
+  }
+
   private async callCommand(info: CommandInfo, args: Json): Promise<ToolResult> {
     const { intent, ...params } = args
     const client = await this.options.connect()
     const response = await client.execute({
       commands: [{ type: info.type, params }],
       origin: 'agent',
+      role: 'composer',
       ...(info.mutates && typeof intent === 'string' && intent.trim() && { intent: intent.trim() }),
     })
     const result = response.results[0] ?? null
@@ -341,7 +381,7 @@ export class McpServer {
     }
     if (!flat.length) return text({ error: 'invalid', message: 'Give at least one change with commands.' }, true)
     const client = await this.options.connect()
-    const response = await client.execute({ commands: flat, origin: 'agent', groups, ...(typeof args.intent === 'string' && args.intent.trim() && { intent: args.intent.trim() }) })
+    const response = await client.execute({ commands: flat, origin: 'agent', role: 'composer', groups, ...(typeof args.intent === 'string' && args.intent.trim() && { intent: args.intent.trim() }) })
     if (response.status === 'proposed') {
       return text({
         status: 'proposed',

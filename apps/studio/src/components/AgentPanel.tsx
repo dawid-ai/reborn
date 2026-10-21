@@ -1,7 +1,7 @@
 import { KeyRound, MessageSquareX, Send, ShieldCheck, Sparkles, Square, X } from 'lucide-react'
 import { Fragment, useEffect, useRef, useState } from 'react'
 import type { AgentProvider } from '@reborn/studio-core'
-import { ask, clearConversation, loadAgentSettings, stopAgent, updateAgentSettings, useAgent } from '../agent/agent'
+import { type AgentRole, ask, clearConversation, loadAgentSettings, setAgentRole, stopAgent, updateAgentSettings, useAgent } from '../agent/agent'
 import { type Inline, parseMarkdown } from '../agent/markdown'
 import { desktop } from '../platform/desktop'
 import { setState } from '../state/store'
@@ -119,6 +119,7 @@ function AgentText({ text }: { text: string }) {
 /** "Working… 1:05" while the agent runs. */
 function Working() {
   const startedAt = useAgent((s) => s.startedAt)
+  const working = useAgent((s) => s.working)
   const [now, setNow] = useState(() => Date.now())
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 1000)
@@ -127,14 +128,27 @@ function Working() {
   const seconds = startedAt ? Math.max(0, Math.floor((now - startedAt) / 1000)) : 0
   return (
     <p className="agent thinking">
-      <span>Agent</span>Working… {Math.floor(seconds / 60)}:{String(seconds % 60).padStart(2, '0')}
+      <span>{working === 'director' ? 'Director' : 'Composer'}</span>Working… {Math.floor(seconds / 60)}:{String(seconds % 60).padStart(2, '0')}
     </p>
   )
 }
 
+const INTROS: Record<AgentRole, { text: string; examples: string[] }> = {
+  composer: {
+    text: 'Ask for help with the song, or ask for a whole song. The Composer reads the project, makes sounds with Ismail, measures the mix before judging it, and proposes changes you review on the timeline and mixer. Each step it takes shows here as it works.',
+    examples: ['Why is there echo in the drop?', 'Make the drop hit harder without clipping', 'Write a 16-step acid line in A minor on Acid 1', 'Add an 8-bar breakdown before the last section', 'Make a 32-bar acid house track at 126 BPM'],
+  },
+  director: {
+    text: 'The Director makes a music video for this song in the Video view. It plans scenes from the song’s sections and drums, checks them with stills, finds stock footage you approve, and renders drafts. It changes only the video, and stops for your approval at each stage. Leave comments in the Video view at any time; it answers them on its next turn.',
+    examples: ['Plan a dark, heavy video for this track', 'Make the drops hit harder and keep the intro calm', 'Add a title slam on the first drop and words on the snares', 'Find lightning footage for the breakdown'],
+  },
+}
+
 export function AgentPanel() {
-  const lines = useAgent((s) => s.lines)
+  const role = useAgent((s) => s.role)
+  const lines = useAgent((s) => s.conversations[s.role])
   const busy = useAgent((s) => s.busy)
+  const working = useAgent((s) => s.working)
   const [draft, setDraft] = useState('')
   const [showSettings, setShowSettings] = useState(false)
   const log = useRef<HTMLDivElement>(null)
@@ -148,7 +162,14 @@ export function AgentPanel() {
     <aside className="agent-panel" aria-label="Agent">
       <header>
         <Sparkles size={15} />
-        <strong>Agent</strong>
+        <div className="seg sm" role="radiogroup" aria-label="Agent role">
+          {(['composer', 'director'] as const).map((r) => (
+            <button key={r} type="button" role="radio" aria-checked={role === r} className={role === r ? 'is-on' : ''} onClick={() => setAgentRole(r)}>
+              {r === 'composer' ? 'Composer' : 'Director'}
+              {working === r && ' ●'}
+            </button>
+          ))}
+        </div>
         <button type="button" className="icon-btn" aria-label="Clear conversation" title="Clear conversation" disabled={busy || !lines.length} onClick={clearConversation}>
           <MessageSquareX size={15} />
         </button>
@@ -165,8 +186,8 @@ export function AgentPanel() {
       <div className="agent-log" ref={log} aria-live="polite">
         {!lines.length && (
           <div className="agent-empty">
-            <p>Ask for help with the song, or ask for a whole song. The agent reads the project, makes sounds with Ismail, measures the mix before judging it, and proposes changes you review on the timeline and mixer. Each step it takes shows here as it works.</p>
-            {['Why is there echo in the drop?', 'Make the drop hit harder without clipping', 'Write a 16-step acid line in A minor on Acid 1', 'Add an 8-bar breakdown before the last section', 'Make a 32-bar acid house track at 126 BPM'].map((example) => (
+            <p>{INTROS[role].text}</p>
+            {INTROS[role].examples.map((example) => (
               <button key={example} type="button" className="chip-btn" onClick={() => void ask(example)}>
                 {example}
               </button>
@@ -176,7 +197,7 @@ export function AgentPanel() {
         {lines.map((line, i) =>
           line.role === 'agent' ? (
             <div key={i} className="agent-line agent">
-              <span>Agent</span>
+              <span>{role === 'director' ? 'Director' : 'Composer'}</span>
               <AgentText text={line.text} />
             </div>
           ) : (
@@ -196,7 +217,7 @@ export function AgentPanel() {
           setDraft('')
         }}
       >
-        <textarea value={draft} rows={2} placeholder="Ask the agent…" aria-label="Message the agent" onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => {
+        <textarea value={draft} rows={2} placeholder={role === 'director' ? 'Ask the Director…' : 'Ask the Composer…'} aria-label="Message the agent" onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => {
           event.stopPropagation()
           if (event.key === 'Enter' && !event.shiftKey) {
             event.preventDefault()

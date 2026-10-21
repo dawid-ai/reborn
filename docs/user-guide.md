@@ -89,7 +89,12 @@ Ismail describes each sound (envelope, pitch, harmonics, brightness) under the *
 
 ## Work with an agent
 
-Click **Agent** in the transport. Choose a provider:
+Click **Agent** in the transport. The panel has two agents, each with its own conversation:
+
+- **Composer** works on the music: patterns, sounds, the mix, and the arrangement.
+- **Director** makes the music video in the **Video** view. It never changes the music. See [Make a music video](#make-a-music-video).
+
+Choose a provider:
 
 - **Claude CLI** uses your Claude Code login.
 - **Claude API** uses an Anthropic API key, stored in the Windows credential store.
@@ -125,6 +130,33 @@ Scenes and text are timed to section markers, so they follow along when you chan
 - **T** in the **Text** lane adds text at the playhead. Text styles include a slam on the drop, words that change on each kick or snare, a typewriter, a flicker on the hats, and a ticker.
 - **Vertical copy** duplicates the storyboard at 1080×1920 for Shorts, Reels, and TikTok.
 - Storyboards are saved in the project, undo like any other edit, and can be edited from the CLI and MCP with the `video.*` commands.
+
+### Stages, comments, and approval
+
+A storyboard moves through five stages, shown above the preview: **Brief**, **Treatment**, **Look-dev**, **Draft**, and **Final**. Click **Start** after you fill in the brief in the inspector (what the video is for, mood, words to show, footage), and approve each later stage when you're happy with it. **Reopen** goes back to an earlier stage.
+
+Leave comments on the storyboard, a scene, a text item, or a still at any time. Open comments block approval until they're answered; **Approve anyway** overrides that. **Render stills** renders a still at each scene, impact, and text moment plus a contact sheet. Click a still in the **Stills** lane to see it large and comment on it.
+
+### The Director
+
+Switch the **Agent** panel to **Director** and describe the video you want. The Director reads the brief, the song's sections, drum hits, and band energy, and works stage by stage: it sets up scenes, checks them with stills, answers your comments, and asks for your approval before moving on. Its storyboard edits apply directly, each as one undo step. It never approves a stage or a footage clip itself, unless you tick the stages it may approve in the storyboard settings.
+
+### Library
+
+**Looks, library, footage** opens a drawer next to the preview:
+
+- **Looks** lists every look with its preview; **Use for scene** switches the selected scene to it.
+- **Library** holds presets (one scene's look settings), templates (a whole storyboard by section role), and saved footage. Built-in presets and a template ship with the app; save your own from the selected scene or the storyboard. Applying a preset copies its settings and pins its version, so later changes to the library never alter a saved video; the scene offers **Update to latest** when there's a newer version. Items the Director suggests wait under **Suggested** until you keep or dismiss them.
+
+### Footage
+
+Turn on **Use stock footage** in the storyboard settings to search Pexels, Pixabay, Wikimedia Commons, and the Internet Archive from the **Footage** tab. Pexels and Pixabay need a free API key, which RE:BORN keeps in the Windows credential store.
+
+- Only free-to-use licences (CC0, public domain, Pexels, Pixabay) are allowed unless you widen the policy. CC BY needs credits; CC BY-SA may require releasing the video under the same licence, and the export warns when a video uses it.
+- Keyword search is literal, so every clip waits for your review. Nothing downloads until you approve a clip, and downloads stay within the clip and megabyte limits in the brief.
+- Pick a footage look (**Footage Grade** or **Footage Kaleido**) for a scene and tick its clips in the inspector. Each cut moves to the next clip. **Skip** jumps past title cards at the start of a clip.
+
+**Export MP4** saves a description file next to the video, with chapters from your section names and credits for the footage. The same text is under **Description** in the storyboard settings. The export range can be the whole song, the loop range, or the selected scene.
 
 ## Save, share, and export
 

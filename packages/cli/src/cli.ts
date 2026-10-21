@@ -210,13 +210,17 @@ const COMMANDS: Record<string, CommandDef> = {
     run: watch,
   },
   mcp: {
-    usage: 'reborn mcp [--read-only]',
+    usage: 'reborn mcp [--read-only] [--role composer|director]',
     summary: 'Run the MCP server over stdio for agents.',
-    details: '--read-only lists only read tools and uses the read token.',
+    details: '--read-only lists only read tools and uses the read token. --role director serves the music video tools instead of the music tools.',
+    flags: { role: 'string' },
     run: async (ctx) => {
+      const role = ctx.args.flags.role
+      if (role !== undefined && role !== 'composer' && role !== 'director') throw new CliError('--role is composer or director.', EXIT.usage, 'invalid')
       await runMcpServer({
         connect: () => connect(discovery(ctx)),
         readOnly: ctx.args.flags['read-only'] === true,
+        role: role === 'director' ? 'director' : 'composer',
         input: ctx.io.input ?? process.stdin,
         output: ctx.io.output ?? process.stdout,
         log: (text) => ctx.io.stderr(`${text}\n`),

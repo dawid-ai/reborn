@@ -51,6 +51,36 @@ export function describeStep(name: string, input: Record<string, unknown> = {}):
       return 'Stopping playback'
     case 'history_undo':
       return 'Undoing the last edit'
+    case 'video_brief_get':
+      return 'Reading the brief and comments'
+    case 'video_reference':
+      return 'Reading the look catalog'
+    case 'video_cues':
+      return 'Reading the song’s sections and drums'
+    case 'video_library_search':
+      return `Searching the library${text(input.text) ? ` for “${text(input.text)}”` : ''}`
+    case 'video_library_apply':
+      return 'Applying a library item'
+    case 'video_storyboard_edit': {
+      const count = Array.isArray(input.commands) ? input.commands.length : 0
+      return `Editing the storyboard: ${text(input.intent) || 'changes'}${count ? ` (${count} edit${count === 1 ? '' : 's'})` : ''}`
+    }
+    case 'video_stills':
+      return Array.isArray(input.moments) ? `Rendering ${input.moments.length} stills` : 'Rendering stills and a contact sheet'
+    case 'video_render':
+      return input.quality === 'final' ? 'Rendering the final video' : 'Rendering a draft video'
+    case 'video_footage_search':
+      return `Searching footage for “${text(input.query)}”`
+    case 'video_footage_propose':
+      return 'Offering clips for your review'
+    case 'video_footage_download':
+      return 'Downloading an approved clip'
+    case 'video_comment_reply':
+      return 'Answering a comment'
+    case 'video_stage_request':
+      return 'Asking for your approval'
+    case 'video_library_promote':
+      return `Suggesting “${text(input.name)}” for the library`
   }
   const words = base.replace(/_/g, ' ')
   const intent = text(input.intent)

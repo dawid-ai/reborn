@@ -30,7 +30,7 @@ export interface ApiServerOptions {
 
 const STATUS: Record<ApiErrorBody['error']['code'], number> = { unauthorized: 401, forbidden: 403, invalid: 400, not_found: 404, conflict: 409, unavailable: 503, internal: 500 }
 const READ_RUNTIME = ['analysis.run', 'proposal.list', 'proposal.status', 'ismail.presets']
-const JOB_RUNTIME = ['render.mix', 'render.stems', 'analysis.run', 'ismail.generate', 'ismail.separate']
+const JOB_RUNTIME = ['render.mix', 'render.stems', 'analysis.run', 'ismail.generate', 'ismail.separate', 'video.tool']
 const MAX_BODY = 2 * 1024 * 1024
 
 class HttpError extends Error {
@@ -197,7 +197,7 @@ export class ApiServer {
 
   private startJob(request: RuntimeRequest): string {
     const id = `job_${randomUUID()}`
-    const kind = request.action.startsWith('render') ? 'render' : request.action.startsWith('ismail') ? 'ismail' : 'analysis'
+    const kind = request.action.startsWith('render') ? 'render' : request.action.startsWith('ismail') ? 'ismail' : request.action.startsWith('video') ? 'video' : 'analysis'
     const update = (patch: Partial<JobState>) => {
       const next = { ...(this.jobs.get(id) as JobState), ...patch }
       this.jobs.set(id, next)
@@ -206,7 +206,8 @@ export class ApiServer {
     this.jobs.set(id, { id, kind, status: 'running', completed: 0, total: 1 })
     void (async () => {
       try {
-        const reply = (await this.forward('runtime', { ...request, params: { ...request.params, jobId: id } }, 600_000)) as { result?: { files?: RenderedFile[] } & Record<string, unknown> }
+        // Director tools can render a whole video, so they get an hour.
+        const reply = (await this.forward('runtime', { ...request, params: { ...request.params, jobId: id } }, kind === 'video' ? 3_600_000 : 600_000)) as { result?: { files?: RenderedFile[] } & Record<string, unknown> }
         if (this.cancelled.delete(id)) return
         if (kind === 'render') {
           const target = typeof request.params?.path === 'string' ? request.params.path : undefined

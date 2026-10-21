@@ -181,7 +181,7 @@ describe('footage in scenes', () => {
     const { project } = withFootage()
     const credits = footageCredits(studio.requireStoryboard(project))
     expect(credits).toContain('"Clip 1" by A. Filmer (pexels), Pexels License')
-    expect(credits.split(String.fromCharCode(10))).toHaveLength(3)
+    expect(credits.split('\n')).toHaveLength(3)
   })
 })
 
@@ -200,6 +200,6 @@ describe('look-dev helpers', () => {
   it('lists sections as chapters starting at 0:00', () => {
     const project = song()
     project.sections = project.sections.map((s) => ({ ...s, start: s.start + 2 }))
-    expect(chapters(project)).toBe(['0:00 Intro', '0:03 Build', '0:09 Drop'].join(String.fromCharCode(10)))
+    expect(chapters(project)).toBe('0:00 Intro\n0:03 Build\n0:09 Drop')
   })
 })

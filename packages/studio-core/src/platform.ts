@@ -185,10 +185,13 @@ export interface AgentSettings {
   cliAvailable: boolean
 }
 
+/** Part of a tool result: text, or an image the model looks at (a still or contact sheet). */
+export type AgentResultPart = { type: 'text'; text: string } | { type: 'image'; mediaType: 'image/png' | 'image/jpeg'; data: string }
+
 export type AgentContent =
   | { type: 'text'; text: string }
   | { type: 'tool_use'; id: string; name: string; input: Record<string, unknown> }
-  | { type: 'tool_result'; tool_use_id: string; content: string; is_error?: boolean }
+  | { type: 'tool_result'; tool_use_id: string; content: string | AgentResultPart[]; is_error?: boolean }
 
 export interface AgentMessage {
   role: 'user' | 'assistant'
@@ -265,8 +268,8 @@ export interface DesktopBridge {
   getAgentSettings(): Promise<AgentSettings>
   setAgentSettings(patch: Partial<Omit<AgentSettings, 'hasKey' | 'cliAvailable'>> & { apiKey?: string | null }): Promise<AgentSettings>
   agentComplete(request: AgentCompleteRequest): Promise<AgentCompleteResponse>
-  /** Runs the Claude CLI with the RE:BORN MCP server attached and returns its final answer. Steps arrive through `onAgentActivity`. */
-  agentRunCli(prompt: string): Promise<{ text: string }>
+  /** Runs the Claude CLI with the RE:BORN MCP server attached, as the Composer or the Director, and returns its final answer. Steps arrive through `onAgentActivity`. */
+  agentRunCli(prompt: string, role?: 'composer' | 'director'): Promise<{ text: string }>
   /** What the Claude CLI is doing while `agentRunCli` runs: each tool call and each note it writes. */
   onAgentActivity(listener: (activity: AgentActivity) => void): () => void
   /** Stops a running `agentRunCli`; it rejects with "Stopped." */

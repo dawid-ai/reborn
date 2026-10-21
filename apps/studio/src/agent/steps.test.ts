@@ -15,6 +15,12 @@ describe('describeStep', () => {
     expect(describeStep('propose_changes', { intent: 'Tame the hats', changes: [{ commands: [1] }] })).toBe('Proposing: Tame the hats (1 change, 1 edit)')
   })
 
+  it('describes the Director’s steps', () => {
+    expect(describeStep('mcp__reborn__video_storyboard_edit', { intent: 'Darker drops', commands: [{}, {}] })).toBe('Editing the storyboard: Darker drops (2 edits)')
+    expect(describeStep('video_footage_search', { query: 'lightning' })).toBe('Searching footage for “lightning”')
+    expect(describeStep('video_render', { quality: 'final' })).toBe('Rendering the final video')
+  })
+
   it('falls back to the tool name with its intent or target', () => {
     expect(describeStep('mcp__reborn__pattern_write', { trackId: 'Acid 1', intent: 'Darker verse line' })).toBe('Pattern write: Darker verse line')
     expect(describeStep('mcp__reborn__mixer_set', { trackId: '909' })).toBe('Mixer set (909)')

@@ -69,6 +69,18 @@ For anything bigger than one tweak, such as a whole song, agents use `edit_batch
 
 `studio_reference` lists track kinds, drum voices and kits, every knob name with its range, and the notation, so an agent doesn't have to guess them. To put an Ismail sound in a batch, an agent calls `ismail_generate` with `place: false` and `bpm` set to the song's tempo, then places the returned `assetId` with `clip.create` and `clip.loop`.
 
+### The Director role
+
+`reborn mcp` serves the Composer's tools, which work on the music. To work on the music video instead, run it as the Director:
+
+```bash
+claude mcp add reborn-video -- reborn mcp --role director
+```
+
+The Director gets video tools only: `video_brief_get`, `video_cues`, `video_reference`, `video_library_search` and `video_library_apply`, `video_storyboard_edit`, `video_stills` (which returns the contact sheet as an image), `video_render`, footage search and proposals, comment replies, `video_stage_request`, and `video_library_promote`. It can read the song with `project_summary` but can't change it. Its storyboard edits apply directly as one undo step each.
+
+RE:BORN enforces each role on every request, whichever client sends it: an agent edit outside its role fails, and neither role can approve a stage, approve footage, or delete a comment. Scripts that use the `reborn` command (origin `script`) aren't limited this way.
+
 ## Security
 
 - The API listens on `127.0.0.1` only, on a random port. It rejects requests not addressed to `127.0.0.1` or `localhost`, and any request from a web page (one that carries an `Origin` header).

@@ -57,8 +57,8 @@ async function launch() {
 
 const cli = (...args) => execFileSync(process.execPath, [CLI, ...args], { env: { ...process.env, REBORN_API_FILE: join(USER_DATA, 'api.json') }, encoding: 'utf8', timeout: 60_000 })
 
-function mcpSession() {
-  const child = spawn(process.execPath, [CLI, 'mcp'], { env: { ...process.env, REBORN_API_FILE: join(USER_DATA, 'api.json') }, stdio: ['pipe', 'pipe', 'pipe'] })
+function mcpSession(args = []) {
+  const child = spawn(process.execPath, [CLI, 'mcp', ...args], { env: { ...process.env, REBORN_API_FILE: join(USER_DATA, 'api.json') }, stdio: ['pipe', 'pipe', 'pipe'] })
   let buffer = ''
   const waiting = new Map()
   child.stdout.on('data', (chunk) => {
@@ -133,6 +133,7 @@ let session = await launch()
   mcp.notify('notifications/initialized')
   const tools = await mcp.send('tools/list', {})
   check(tools.result.tools.some((t) => t.name === 'project_update'), 'MCP lists project_update')
+  check(!tools.result.tools.some((t) => t.name.startsWith('video_')), 'the Composer MCP lists no video tools')
   const proposed = await mcp.send('tools/call', { name: 'project_update', arguments: { tempo: 128, intent: 'Lift the tempo a little' } })
   check(/propos/i.test(proposed.result.content[0].text), `MCP edit should be proposed: ${proposed.result.content[0].text}`)
   mcp.close()
@@ -144,6 +145,40 @@ let session = await launch()
   cli('undo')
   await until(() => state(() => window.__studio.getState().project.tempo === 127), 'CLI undo')
 
+  // The Director over MCP: it builds a storyboard, can't touch the music,
+  // looks at stills, and waits for the user at the stage gate.
+  const director = mcpSession(['--role', 'director'])
+  await director.send('initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'smoke', version: '1' } })
+  director.notify('notifications/initialized')
+  const directorTools = (await director.send('tools/list', {})).result.tools.map((t) => t.name)
+  check(directorTools.includes('video_stills') && !directorTools.includes('project_update'), `Director tools ${directorTools.join(', ')}`)
+  const call = (name, args = {}) => director.send('tools/call', { name, arguments: args }).then((reply) => reply.result)
+  const created = await call('video_storyboard_edit', { intent: 'Start the storyboard', commands: [{ type: 'video.storyboard.create', params: {} }] })
+  check(!created.isError, `Director created a storyboard: ${created.content[0].text}`)
+  const refused = await call('video_storyboard_edit', { intent: 'Speed up', commands: [{ type: 'project.update', params: { tempo: 170 } }] })
+  check(refused.isError && /Director edits only storyboards/.test(refused.content[0].text), `Director music edit refused: ${refused.content[0].text}`)
+  check((await state(() => window.__studio.getState().project.tempo)) === 127, 'the Director left the tempo alone')
+  const cues = JSON.parse((await call('video_cues')).content[0].text)
+  check(Array.isArray(cues.sections) && cues.tempo === 127, `Director reads cues ${JSON.stringify(cues).slice(0, 120)}`)
+  const stills = await call('video_stills')
+  check(stills.content.some((part) => part.type === 'image' && part.data.length > 1000), 'Director sees the contact sheet')
+  const comment = await call('video_storyboard_edit', { intent: 'Leave a note', commands: [{ type: 'video.comment.add', params: { text: 'Intro stays calm.', author: 'user' } }] })
+  check(!comment.isError, 'Director comment added')
+  const approve = await call('video_storyboard_edit', { intent: 'Approve itself', commands: [{ type: 'video.stage.approve', params: {} }] })
+  check(approve.isError, 'the Director cannot approve a stage')
+  await call('video_stage_request', { summary: 'Brief understood; one scene per section.' })
+  director.close()
+  const board = await state(() => window.__studio.getState().project.video.storyboards[0])
+  check(board.request?.summary === 'Brief understood; one scene per section.', 'stage request recorded')
+  check(board.comments[0]?.author === 'director', `Director comments are marked as its own (${board.comments[0]?.author})`)
+  check(board.stills.length >= 2, 'Director stills stored on the storyboard')
+  await page.keyboard.press('5')
+  await page.getByRole('button', { name: 'Done', exact: true }).first().click()
+  await page.getByRole('button', { name: 'Start', exact: true }).click()
+  await until(() => state(() => window.__studio.getState().project.video.storyboards[0].stage === 'treatment'), 'user approves the brief')
+  await page.screenshot({ path: join(OUT, 'director.png') })
+  await page.keyboard.press('1')
+
   // Save, edit, save again without rewriting audio, export, pack, reopen.
   await menu('save')
   await until(async () => existsSync(join(PROJECT_DIR, 'project.json')), 'project.json')
@@ -151,6 +186,9 @@ let session = await launch()
   check(document.formatVersion === 2 && document.studio?.schema === 'reborn-studio', 'project.json is a v2 studio document')
   const assetFiles = existsSync(join(PROJECT_DIR, 'assets')) ? await readdir(join(PROJECT_DIR, 'assets')) : []
   check(assetFiles.length >= 1, 'imported audio was saved with the project')
+  const videoFiles = existsSync(join(PROJECT_DIR, 'video')) ? await readdir(join(PROJECT_DIR, 'video')) : []
+  check(videoFiles.filter((f) => f.endsWith('.png')).length >= 3, `stills were saved in the video folder (${videoFiles.join(', ')})`)
+  check(document.studio?.video?.storyboards?.length === 1, 'the storyboard was saved with the project')
   await until(async () => !(await title()).startsWith('•'), 'saved title')
   const before = assetFiles[0] ? (await stat(join(PROJECT_DIR, 'assets', assetFiles[0]))).mtimeMs : 0
   await tempo.fill('130')

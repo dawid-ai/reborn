@@ -62,6 +62,12 @@ export interface CommandInfo {
 export interface ExecuteRequest {
   commands: Command[]
   origin?: 'script' | 'agent'
+  /**
+   * For agents: which agent is asking. The Composer edits music; the
+   * Director edits storyboards and its edits apply directly. Agents without
+   * a role count as the Composer.
+   */
+  role?: 'composer' | 'director'
   label?: string
   /** Fails with 409 when the project revision moved on. */
   expectedRevision?: number
@@ -106,6 +112,8 @@ export type RuntimeAction =
   | 'ismail.generate'
   /** Job: splits audio into stems on new audio tracks. Params: {clipId} or {assetId, bar?} or {trackId} (deck or sampler source). */
   | 'ismail.separate'
+  /** Runs one of the Director's tools. Params: {name, input}. Result: {text, image?: {mediaType, data}}. */
+  | 'video.tool'
 
 export interface RuntimeRequest {
   action: RuntimeAction

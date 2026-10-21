@@ -19,7 +19,7 @@ interface ToolInfo {
 }
 
 interface ToolResult {
-  content: { type: string; text: string }[]
+  content: { type: string; text?: string; data?: string; mimeType?: string }[]
   isError?: boolean
 }
 
@@ -29,7 +29,7 @@ afterEach(async () => {
 })
 
 /** Runs the MCP server on in-memory streams and talks to it line by line. */
-function harness(options: { readOnly?: boolean; apiFile?: string } = {}) {
+function harness(options: { readOnly?: boolean; apiFile?: string; role?: 'composer' | 'director' } = {}) {
   const input = new PassThrough()
   const output = new PassThrough()
   const lines: string[] = []
@@ -52,6 +52,7 @@ function harness(options: { readOnly?: boolean; apiFile?: string } = {}) {
   const done = runMcpServer({
     connect: () => connect({ apiFile: options.apiFile ?? server.apiFile, readOnly: options.readOnly }),
     readOnly: options.readOnly,
+    role: options.role,
     input,
     output,
     log: (text) => logs.push(text),
@@ -71,7 +72,8 @@ function harness(options: { readOnly?: boolean; apiFile?: string } = {}) {
     const reply = await request('tools/call', { name, arguments: args })
     if (reply.error) throw new Error(reply.error.message)
     const result = reply.result as unknown as ToolResult
-    return { ...result, data: JSON.parse(result.content[0].text) as Record<string, unknown> }
+    const first = result.content[0].text ?? ''
+    return { ...result, data: (first.startsWith('{') || first.startsWith('[') ? JSON.parse(first) : { text: first }) as Record<string, unknown> }
   }
   const tools = async () => ((await request('tools/list')).result as { tools: ToolInfo[] }).tools
   return { input, lines, logs, send, request, call, tools, close: async () => (input.end(), await done) }
@@ -167,7 +169,7 @@ describe('MCP tools', () => {
     expect(result.data).toMatchObject({ status: 'proposed', proposalId: expect.stringMatching(/^prop_/) })
     expect(result.data.note).toMatch(/Not applied yet/)
     expect(server.state.project.revision).toBe(before)
-    expect(server.requests.at(-1)?.body).toEqual({ commands: [{ type: 'parameter.set', params: { trackId: 'Acid 1', param: 'device.cutoff', value: 0.8 } }], origin: 'agent', intent: 'Open the filter for the chorus.' })
+    expect(server.requests.at(-1)?.body).toEqual({ commands: [{ type: 'parameter.set', params: { trackId: 'Acid 1', param: 'device.cutoff', value: 0.8 } }], origin: 'agent', role: 'composer', intent: 'Open the filter for the chorus.' })
     const status = await mcp.call('proposal_status', { proposalId: result.data.proposalId })
     expect(status.data).toMatchObject({ status: 'done', result: { status: 'pending', intent: 'Open the filter for the chorus.' } })
     await mcp.close()
@@ -250,6 +252,36 @@ describe('MCP tools', () => {
     expect(server.state.project.tempo).toBe(90)
     await mcp.call('history_undo')
     expect(server.state.project.tempo).not.toBe(90)
+    await mcp.close()
+  })
+})
+
+describe('MCP roles', () => {
+  beforeEach(async () => {
+    server = await startFakeServer()
+  })
+
+  it('keeps video tools and the user’s decisions away from the Composer', async () => {
+    const mcp = harness()
+    const names = (await mcp.tools()).map((t) => t.name)
+    expect(names).toContain('pattern_write')
+    expect(names.some((n) => n.startsWith('video_'))).toBe(false)
+    await mcp.close()
+  })
+
+  it('serves the Director only video tools, with images from stills', async () => {
+    const mcp = harness({ role: 'director' })
+    const init = await mcp.request('initialize', { protocolVersion: '2025-06-18' })
+    expect((init.result as { instructions: string }).instructions).toMatch(/You are the Director/)
+    const names = (await mcp.tools()).map((t) => t.name)
+    expect(names).toEqual(expect.arrayContaining(['video_brief_get', 'video_storyboard_edit', 'video_stills', 'video_stage_request', 'project_summary']))
+    expect(names).not.toContain('pattern_write')
+    expect(names).not.toContain('edit_batch')
+    expect(names).not.toContain('history_undo')
+    const stills = await mcp.call('video_stills', {})
+    expect(stills.content).toEqual([{ type: 'text', text: 'ran video_stills' }, { type: 'image', data: 'iVBORw0KGgo=', mimeType: 'image/png' }])
+    const runtime = server.requests.filter((r) => r.path === '/v1/runtime').map((r) => (r.body as { action: string; params: { name: string } }).params?.name)
+    expect(runtime).toContain('video_stills')
     await mcp.close()
   })
 })

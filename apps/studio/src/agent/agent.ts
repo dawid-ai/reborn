@@ -5,12 +5,18 @@ import { runGenerate } from '../audio/ismail'
 import { desktop } from '../platform/desktop'
 import { addProposal } from '../state/proposals'
 import { dispatch, getState } from '../state/store'
+import { type ToolOutcome, runDirectorTool } from './director'
 import { checkNotes, resolveInstrument } from './sound'
 import { describeStep } from './steps'
 
-// The in-app agent. It reads the project with the registry's read commands,
-// measures rendered audio before making claims, and changes the project only
-// by proposing command batches the user reviews (unless direct edits are on).
+// The in-app agents. The Composer reads the project with the registry's read
+// commands, measures rendered audio before making claims, and changes the
+// music only by proposing command batches the user reviews (unless direct
+// edits are on). The Director makes the music video: it edits storyboards
+// directly, one undo step at a time, and stops at every stage gate for the
+// user. Each has its own conversation.
+
+export type AgentRole = studio.AgentRole
 
 export interface ChatLine {
   role: 'user' | 'agent' | 'tool'
@@ -18,21 +24,30 @@ export interface ChatLine {
 }
 
 interface AgentState {
-  lines: ChatLine[]
+  /** The agent the panel shows and new requests go to. */
+  role: AgentRole
+  conversations: Record<AgentRole, ChatLine[]>
   busy: boolean
+  /** The agent that is working, while busy. */
+  working: AgentRole | null
   /** When the running request started, for the elapsed time. */
   startedAt: number | null
   settings: AgentSettings | null
 }
 
-let state: AgentState = { lines: [], busy: false, startedAt: null, settings: null }
+let state: AgentState = { role: 'composer', conversations: { composer: [], director: [] }, busy: false, working: null, startedAt: null, settings: null }
 let stopRequested = false
 const listeners = new Set<() => void>()
 const set = (patch: Partial<AgentState>) => {
   state = { ...state, ...patch }
   listeners.forEach((l) => l())
 }
-const say = (line: ChatLine) => set({ lines: [...state.lines.slice(-60), line] })
+const sayTo = (role: AgentRole, line: ChatLine) => set({ conversations: { ...state.conversations, [role]: [...state.conversations[role].slice(-60), line] } })
+
+/** Shows the Composer's or the Director's conversation. */
+export function setAgentRole(role: AgentRole): void {
+  set({ role })
+}
 
 export function useAgent<T>(select: (s: AgentState) => T): T {
   return useSyncExternalStore(
@@ -144,7 +159,7 @@ function systemPrompt(): string {
   const { project } = getState()
   const mutating = studio
     .listCommands()
-    .filter((c) => c.mutates)
+    .filter((c) => c.mutates && studio.roleAllows('composer', c.type))
     .map((c) => `- ${c.type}: ${c.summary}`)
     .join('\n')
   return [
@@ -201,12 +216,13 @@ async function runTool(name: string, input: Record<string, unknown>, settings: A
     }
     if (name === 'command_help') {
       const types = (input.types as string[]) ?? []
-      return { content: JSON.stringify(studio.listCommands().filter((c) => types.includes(c.type))) }
+      return { content: JSON.stringify(studio.listCommands().filter((c) => types.includes(c.type) && studio.roleAllows('composer', c.type))) }
     }
     if (name === 'propose_changes') {
       const changes = (input.changes as { summary: string; detail?: string; commands: studio.Command[] }[]) ?? []
       const commands = changes.flatMap((c) => c.commands)
       if (!commands.length) return { content: 'No commands were given.', isError: true }
+      studio.checkRoleCommands('composer', commands)
       studio.executeBatch(getState().project, commands, { origin: 'agent' })
       if (settings.directEdits) {
         dispatch(commands, { origin: 'agent', label: `Agent: ${String(input.intent ?? 'edit')}` })
@@ -215,7 +231,7 @@ async function runTool(name: string, input: Record<string, unknown>, settings: A
       const proposal = addProposal({
         id: studio.newId('prp'),
         source: 'agent',
-        request: state.lines.filter((l) => l.role === 'user').at(-1)?.text ?? '',
+        request: state.conversations.composer.filter((l) => l.role === 'user').at(-1)?.text ?? '',
         intent: String(input.intent ?? 'Proposed changes'),
         evidence: ((input.evidence as string[]) ?? []).map(String),
         changes: changes.map((c, i) => ({ id: `c${i + 1}`, summary: c.summary, detail: c.detail ?? '', commands: c.commands })),
@@ -230,30 +246,44 @@ async function runTool(name: string, input: Record<string, unknown>, settings: A
 
 /** Stops the running request: the Claude CLI at once, the in-app agent after its current step. */
 export function stopAgent(): void {
-  if (!state.busy || stopRequested) return
+  if (!state.busy || stopRequested || !state.working) return
   stopRequested = true
-  say({ role: 'tool', text: 'Stopping…' })
+  sayTo(state.working, { role: 'tool', text: 'Stopping…' })
   desktop?.agentCancel()
 }
 
-/** Starts a new conversation. The agent forgets earlier turns; the project is unchanged. */
+/** Starts a new conversation with the shown agent. It forgets earlier turns; the project is unchanged. */
 export function clearConversation(): void {
   if (state.busy) return
-  set({ lines: [] })
+  set({ conversations: { ...state.conversations, [state.role]: [] } })
 }
+
+/** The Director's view of where the video stands, added to its instructions each turn. */
+function directorContext(): string {
+  const { project } = getState()
+  const video = project.video
+  const board = video?.storyboards.find((b) => b.id === video.activeId) ?? video?.storyboards[0]
+  if (!board) return `Song "${project.name}": ${project.tempo} BPM, ${project.length} bars, sections: ${project.sections.map((s) => s.name).join(', ') || 'none'}. There is no storyboard yet.`
+  const open = studio.openComments(board).length
+  return `Song "${project.name}": ${project.tempo} BPM, ${project.length} bars. Active storyboard "${board.name}" (${board.width}x${board.height}, ${board.fps} fps) is at the ${board.stage} stage${board.request ? ', waiting for the user to approve it' : ''}, with ${board.scenes.length} scenes and ${open} open comment${open === 1 ? '' : 's'}.`
+}
+
+const DIRECTOR_TOOLS: AgentToolSpec[] = studio.DIRECTOR_TOOLS.map((t) => ({ ...t }))
 
 export async function ask(prompt: string): Promise<void> {
   const text = prompt.trim()
   if (!text || state.busy) return
+  const role = state.role
+  const say = (line: ChatLine) => sayTo(role, line)
   say({ role: 'user', text })
   if (!desktop) {
-    say({ role: 'agent', text: 'The agent runs in the desktop edition, which keeps API keys in your OS credential store. In the browser you can still use the analyzer and signal trace in Mix view.' })
+    say({ role: 'agent', text: 'The agents run in the desktop edition, which keeps API keys in your OS credential store. In the browser you can still use the analyzer and signal trace in Mix view, and build the video yourself in Video view.' })
     return
   }
   const settings = state.settings ?? (await loadAgentSettings())
   if (!settings) return
   stopRequested = false
-  set({ busy: true, startedAt: Date.now() })
+  set({ busy: true, working: role, startedAt: Date.now() })
   try {
     if (settings.provider === 'claude-cli') {
       if (!settings.cliAvailable) throw new Error('The claude command was not found. Install Claude Code, or pick another provider.')
@@ -265,9 +295,11 @@ export async function ask(prompt: string): Promise<void> {
         else say({ role: 'agent', text: (lastNote = activity.text) })
       })
       try {
-        const result = await desktop.agentRunCli(
-          `${systemPrompt()}\n\nCurrent project: ${summary}\n\nUser request: ${text}\n\nUse the reborn MCP tools. Edits become proposals the user reviews unless direct edits are on. For a song or anything with several steps, send everything, including the tempo, in one edit_batch proposal, using ref to build on earlier steps; make Ismail sounds before it with place false and bpm set to the song tempo.`,
-        )
+        const instructions =
+          role === 'director'
+            ? `${studio.DIRECTOR_PROMPT}\n\n${directorContext()}\n\nUser request: ${text}\n\nUse the reborn MCP tools (video_brief_get first). Storyboard edits apply directly, one undo step each.`
+            : `${systemPrompt()}\n\nCurrent project: ${summary}\n\nUser request: ${text}\n\nUse the reborn MCP tools. Edits become proposals the user reviews unless direct edits are on. For a song or anything with several steps, send everything, including the tempo, in one edit_batch proposal, using ref to build on earlier steps; make Ismail sounds before it with place false and bpm set to the song tempo.`
+        const result = await desktop.agentRunCli(instructions, role)
         if (result.text.trim() && result.text.trim() !== lastNote) say({ role: 'agent', text: result.text.trim() })
         else if (!lastNote) say({ role: 'agent', text: 'Done.' })
       } finally {
@@ -275,9 +307,13 @@ export async function ask(prompt: string): Promise<void> {
       }
       return
     }
-    const messages: AgentMessage[] = [...historyAsMessages(), { role: 'user', content: [{ type: 'text', text }] }]
-    for (let round = 0; round < 20 && !stopRequested; round += 1) {
-      const response = await desktop.agentComplete({ system: systemPrompt(), messages, tools: tools(), maxTokens: 8192 })
+    const messages: AgentMessage[] = [...historyAsMessages(role), { role: 'user', content: [{ type: 'text', text }] }]
+    const rounds = role === 'director' ? 40 : 20
+    for (let round = 0; round < rounds && !stopRequested; round += 1) {
+      const response =
+        role === 'director'
+          ? await desktop.agentComplete({ system: `${studio.DIRECTOR_PROMPT}\n\n${directorContext()}`, messages, tools: DIRECTOR_TOOLS, maxTokens: 8192 })
+          : await desktop.agentComplete({ system: systemPrompt(), messages, tools: tools(), maxTokens: 8192 })
       messages.push({ role: 'assistant', content: response.content })
       const texts = response.content.filter((c): c is Extract<AgentContent, { type: 'text' }> => c.type === 'text').map((c) => c.text.trim()).filter(Boolean)
       if (texts.length) say({ role: 'agent', text: texts.join('\n\n') })
@@ -286,8 +322,8 @@ export async function ask(prompt: string): Promise<void> {
       const results: AgentContent[] = []
       for (const call of calls) {
         say({ role: 'tool', text: describeStep(call.name, call.input) })
-        const outcome = stopRequested ? { content: 'The user stopped the agent.', isError: true } : await runTool(call.name, call.input, settings)
-        if (outcome.isError && !stopRequested) say({ role: 'tool', text: `That failed: ${outcome.content.slice(0, 200)}` })
+        const outcome: ToolOutcome = stopRequested ? { content: 'The user stopped the agent.', isError: true } : role === 'director' ? await runDirectorTool(call.name, call.input) : await runTool(call.name, call.input, settings)
+        if (outcome.isError && !stopRequested) say({ role: 'tool', text: `That failed: ${String(outcome.content).slice(0, 200)}` })
         results.push({ type: 'tool_result', tool_use_id: call.id, content: outcome.content, is_error: outcome.isError })
       }
       messages.push({ role: 'user', content: results })
@@ -298,15 +334,15 @@ export async function ask(prompt: string): Promise<void> {
     say({ role: 'agent', text: stopRequested || message === 'Stopped.' ? 'Stopped.' : `Something went wrong: ${message}` })
   } finally {
     stopRequested = false
-    set({ busy: false, startedAt: null })
+    set({ busy: false, working: null, startedAt: null })
   }
 }
 
-function historyAsMessages(): AgentMessage[] {
+function historyAsMessages(role: AgentRole): AgentMessage[] {
   // Keep a short text-only memory of the conversation.
   // Providers need alternating turns that start with the user and end with
   // the assistant, because the new request is appended as a user turn.
-  const turns = state.lines
+  const turns = state.conversations[role]
     .slice(-9, -1)
     .filter((l) => l.role !== 'tool')
     .map((l) => ({ role: l.role === 'user' ? ('user' as const) : ('assistant' as const), content: [{ type: 'text' as const, text: l.text }] }))

@@ -5,7 +5,7 @@ import type { AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { ApiDiscovery, ApiErrorBody, ApiEvent, ApiStatus, ExecuteRequest, ExecuteResponse, JobState, RuntimeRequest } from '@reborn/studio-core/api'
-import { COMMANDS, type Command, type StudioProject, StudioError, createDefaultStudioProject, executeBatch, listCommands } from '@reborn/studio-core/studio'
+import { COMMANDS, type Command, type StudioProject, StudioError, checkRoleCommands, createDefaultStudioProject, executeBatch, listCommands } from '@reborn/studio-core/studio'
 
 // Test double for the desktop's local service. It implements the routes in
 // `@reborn/studio-core/api` against an in-memory project with the real
@@ -93,8 +93,11 @@ export async function startFakeServer(options: FakeServerOptions = {}): Promise<
     if (!Array.isArray(body.commands)) throw new HttpError('invalid', 'commands must be a list.')
     const mutates = body.commands.some((c) => COMMANDS.get(c.type)?.mutates)
     if (mutates && role !== 'write') throw new HttpError('forbidden', 'The read token cannot edit the project.')
-    const result = executeBatch(state.project, body.commands, { origin: body.origin ?? 'script', label: body.label, expectedRevision: body.expectedRevision })
-    if (mutates && body.origin === 'agent' && !state.directAgentEdits) {
+    // Like the app: agents get one domain each, and the Director's edits apply directly.
+    const agentRole = body.origin === 'agent' ? (body.role === 'director' ? 'director' : 'composer') : null
+    const commands = agentRole ? checkRoleCommands(agentRole, body.commands) : body.commands
+    const result = executeBatch(state.project, commands, { origin: body.origin ?? 'script', label: body.label, expectedRevision: body.expectedRevision })
+    if (mutates && body.origin === 'agent' && agentRole !== 'director' && !state.directAgentEdits) {
       const proposal: FakeProposal = { id: `prop_${nextId++}`, commands: body.commands, intent: body.intent, status: 'pending' }
       state.proposals.push(proposal)
       emit({ type: 'proposal', id: proposal.id, status: 'pending' })
@@ -152,6 +155,11 @@ export async function startFakeServer(options: FakeServerOptions = {}): Promise<
       case 'project.open':
         if (state.project.revision > 0 && params.discardChanges !== true) throw new HttpError('conflict', 'The open project has unsaved changes.')
         return { result: { name: 'Opened', path: params.path, revision: 0 } }
+      case 'video.tool': {
+        const name = String(params.name)
+        // Stills come back with an image, like the app's contact sheet.
+        return { jobId: startJob('video', { text: `ran ${name}`, ...(name === 'video_stills' && { image: { mediaType: 'image/png', data: 'iVBORw0KGgo=' } }) }) }
+      }
       case 'proposal.list':
         return { result: state.proposals }
       case 'proposal.status': {

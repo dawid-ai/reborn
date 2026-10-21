@@ -98,6 +98,46 @@ try {
   await page.waitForTimeout(500)
   await page.screenshot({ path: `${OUT}/video-text.png` })
 
+  // An open comment blocks the stage gate until it is answered.
+  await page.keyboard.press('Escape')
+  const current = () => state(page, () => window.__studio.getState().project.video.storyboards[0])
+  await page.getByPlaceholder(/A comment or request/).fill('Make the drop darker')
+  await page.getByRole('button', { name: 'Add comment' }).click()
+  check(await page.getByRole('button', { name: 'Start', exact: true }).isDisabled(), 'Start is enabled with an open comment')
+  await page.getByRole('button', { name: 'Done', exact: true }).first().click()
+  await page.getByRole('button', { name: 'Start', exact: true }).click()
+  check((await current()).stage === 'treatment', `the brief was not approved (${(await current()).stage})`)
+
+  // Look-dev stills and a contact sheet land on the storyboard.
+  await page.getByRole('button', { name: 'Render stills' }).click()
+  await page.waitForFunction(() => window.__studio.getState().project.video.storyboards[0].stills.length >= 3, null, { timeout: 60_000 })
+  const files = await state(page, () => {
+    const video = window.__studio.getState().project.video
+    return video.storyboards[0].stills.map((id) => video.files[id].kind)
+  })
+  check(files.includes('sheet') && files.filter((k) => k === 'still').length >= 2, `stills were not stored (${files.join(', ')})`)
+  await page.locator('.video-still-thumb').first().click()
+  await page.locator('img.video-still-large').waitFor()
+  await page.waitForTimeout(400)
+  await page.screenshot({ path: `${OUT}/video-still.png` })
+  await page.getByRole('button', { name: 'Close the still' }).click()
+
+  // The library: apply a built-in preset, then save the scene as a preset of our own.
+  await page.locator('.video-block.scene', { hasText: 'Drop' }).click()
+  await page.getByRole('button', { name: 'Looks, library, footage' }).click()
+  await page.locator('.vlib-item', { hasText: 'Drop: Grid Tunnel' }).getByRole('button', { name: 'Apply to scene' }).click()
+  const applied = (await current()).scenes[1]
+  check(applied.look === 'grid-tunnel' && applied.preset?.id === 'builtin-drop-2', `the preset was not applied (${applied.look}, ${JSON.stringify(applied.preset)})`)
+  await page.getByLabel('Name for the library item').fill('Smoke drop')
+  await page.getByRole('button', { name: 'Scene as preset' }).click()
+  await page.locator('.vlib-item', { hasText: 'Smoke drop' }).waitFor({ timeout: 20_000 })
+  await page.getByRole('tab', { name: 'Looks' }).click()
+  await page.locator('.vlib-item').first().waitFor()
+  await page.getByRole('tab', { name: 'Footage' }).click()
+  await page.getByText(/Footage search and downloads run in the desktop app/).waitFor()
+  await page.screenshot({ path: `${OUT}/video-drawer.png` })
+  await page.getByRole('button', { name: 'Close the drawer' }).click()
+
   // Mix analysis fills in the band envelopes.
   await page.getByRole('button', { name: 'Analyze mix' }).click()
   await page.getByText('Mix analyzed').waitFor({ timeout: 60_000 })

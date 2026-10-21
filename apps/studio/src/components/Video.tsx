@@ -2,13 +2,17 @@ import '@fontsource/big-shoulders-display/900'
 import '@fontsource/chakra-petch/700'
 import '@fontsource/barlow-condensed/700'
 import '@fontsource/share-tech-mono/400'
-import { Clapperboard, Download, Film, Plus, RefreshCw, Type } from 'lucide-react'
+import { Camera, Clapperboard, Download, Film, Library, Plus, RefreshCw, Type } from 'lucide-react'
 import { type CSSProperties, type MouseEvent, useEffect, useMemo, useRef, useState } from 'react'
 import { studio } from '@reborn/studio-core'
 import { type Timeline as TimelineType, Timeline, VideoRenderer, lookById } from '@reborn/video'
 import { engine, usePlayhead } from '../audio/host'
-import { dispatch, select, useStudio } from '../state/store'
+import { type Selection, dispatch, select, useStudio } from '../state/store'
 import { exportVideo, loadVideoFonts } from '../video/export'
+import { renderLookDev } from '../video/lookdev'
+import { footage } from '../video/media'
+import { type DrawerTab, VideoDrawer } from './VideoDrawer'
+import { StageBar, StillViewer, StoredImage } from './VideoReview'
 import { analyzeSong, isAnalysisCurrent, useAnalysis } from '../video/session'
 
 // Video view: a live preview that follows the transport, and lanes aligned
@@ -47,12 +51,34 @@ function EmptyVideo() {
   )
 }
 
-function VideoBar({ board }: { board: studio.Storyboard }) {
+type ExportRange = 'song' | 'loop' | 'scene'
+
+/** Seconds to export for a range choice, or undefined for the whole song. */
+function rangeSeconds(range: ExportRange, timeline: TimelineType, selection: Selection): [number, number] | undefined {
+  const bar = timeline.cues.barSeconds
+  if (range === 'loop') {
+    const loop = engine.snapshot().loop
+    return loop ? [loop[0] * bar, loop[1] * bar] : undefined
+  }
+  if (range === 'scene') {
+    const scene = selection.kind === 'videoScene' ? timeline.scenes.find((s) => s.scene.id === selection.sceneId) : undefined
+    return scene ? [scene.t0, Math.min(scene.t1, timeline.duration)] : undefined
+  }
+  return undefined
+}
+
+function VideoBar({ board, timeline, drawer, onDrawer }: { board: studio.Storyboard; timeline: TimelineType; drawer: DrawerTab | null; onDrawer: (tab: DrawerTab | null) => void }) {
   const boards = useStudio((s) => s.project.video?.storyboards ?? [])
   const project = useStudio((s) => s.project)
+  const selection = useStudio((s) => s.selection)
+  const loop = useStudio((s) => s.transport.loop)
   const analysis = useAnalysis()
   const current = analysis.signature !== null && isAnalysisCurrent(project)
   const exporting = useStudio((s) => s.jobs.some((j) => j.id.startsWith('video-export') && j.status === 'running'))
+  const stilling = useStudio((s) => s.jobs.some((j) => j.id.startsWith('video-stills') && j.status === 'running'))
+  const [range, setRange] = useState<ExportRange>('song')
+  const sceneSelected = selection.kind === 'videoScene'
+  const exportRange = rangeSeconds(range, timeline, selection)
   const size = studio.VIDEO_SIZES.find((s) => s.width === board.width && s.height === board.height)
   const update = (params: Record<string, unknown>, label: string) => dispatch({ type: 'video.storyboard.update', params: { storyboardId: board.id, ...params } }, { label })
   return (
@@ -89,6 +115,9 @@ function VideoBar({ board }: { board: studio.Storyboard }) {
       <button type="button" className="chip-btn" title="Copy this storyboard as a 1080×1920 vertical cut" onClick={() => dispatch({ type: 'video.storyboard.duplicate', params: { storyboardId: board.id, name: `${board.name} vertical`, width: 1080, height: 1920 } }, { label: 'Duplicate as vertical' })}>
         Vertical copy
       </button>
+      <button type="button" className={`chip-btn${drawer ? ' is-on' : ''}`} aria-pressed={Boolean(drawer)} onClick={() => onDrawer(drawer ? null : 'library')}>
+        <Library size={13} /> Looks, library, footage
+      </button>
       <span className="video-bar-spacer" />
       <span className={`video-analysis${current ? ' is-current' : ''}`} title="Band envelopes and the waveform come from a render of the mix. Drum pulses come straight from the patterns and never need this.">
         {analysis.running ? 'Analyzing the mix…' : current ? 'Mix analyzed' : analysis.signature ? 'Music changed since the analysis' : 'Bass and hat motion need a mix analysis'}
@@ -96,10 +125,22 @@ function VideoBar({ board }: { board: studio.Storyboard }) {
       <button type="button" className="chip-btn" disabled={analysis.running || current} onClick={() => void analyzeSong()}>
         <RefreshCw size={13} /> Analyze mix
       </button>
-      <button type="button" className="chip-btn" disabled={exporting} title="Half-size render to check timing quickly" onClick={() => void exportVideo({ scale: 0.5 })}>
+      <button type="button" className="chip-btn" disabled={stilling} title="Render a still at each scene, impact, and text moment, plus a contact sheet" onClick={() => void renderLookDev({ storyboardId: board.id })}>
+        <Camera size={13} /> Render stills
+      </button>
+      <select aria-label="Export range" value={range} onChange={(event) => setRange(event.target.value as ExportRange)}>
+        <option value="song">Whole song</option>
+        <option value="loop" disabled={!loop}>
+          Loop range
+        </option>
+        <option value="scene" disabled={!sceneSelected}>
+          Selected scene
+        </option>
+      </select>
+      <button type="button" className="chip-btn" disabled={exporting} title="Half-size render to check timing quickly" onClick={() => void exportVideo({ scale: 0.5, storyboardId: board.id, range: exportRange })}>
         <Film size={13} /> Export draft
       </button>
-      <button type="button" className="chip-btn primary" disabled={exporting} onClick={() => void exportVideo({ scale: 1 })}>
+      <button type="button" className="chip-btn primary" disabled={exporting} onClick={() => void exportVideo({ scale: 1, storyboardId: board.id, range: exportRange })}>
         <Download size={13} /> Export MP4
       </button>
     </div>
@@ -125,6 +166,7 @@ function Preview({ board, timeline }: { board: studio.Storyboard; timeline: Time
   useEffect(() => {
     try {
       rendererRef.current = new VideoRenderer(canvasRef.current!)
+      rendererRef.current.setFootage(footage)
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     }
@@ -222,9 +264,21 @@ function CueTicks({ timeline }: { timeline: TimelineType }) {
   return <canvas ref={ref} className="video-cues" aria-hidden="true" />
 }
 
+/** Where a comment sits on the timeline, in seconds, or null for storyboard-wide comments. */
+function commentSeconds(comment: studio.VideoComment, project: studio.StudioProject, board: studio.Storyboard, timeline: TimelineType): number | null {
+  const t = comment.target
+  if (t.kind === 'scene') return timeline.scenes.find((s) => s.scene.id === t.sceneId)?.t0 ?? null
+  if (t.kind === 'text') return timeline.texts.find((x) => x.item.id === t.textId)?.t0 ?? null
+  if (t.kind === 'time') return studio.timeRefSeconds(project, t.at)
+  if (t.kind === 'still') return project.video?.files[t.fileId]?.seconds ?? null
+  return null
+}
+
 function Lanes({ board, timeline }: { board: studio.Storyboard; timeline: TimelineType }) {
   const project = useStudio((s) => s.project)
   const selection = useStudio((s) => s.selection)
+  const files = useStudio((s) => s.project.video?.files)
+  const [viewing, setViewing] = useState<string | null>(null)
   const barSeconds = timeline.cues.barSeconds
   const duration = timeline.duration
   const playhead = usePlayhead((bar) => Math.min(1, (bar * barSeconds) / duration))
@@ -262,6 +316,8 @@ function Lanes({ board, timeline }: { board: studio.Storyboard; timeline: Timeli
             <Type size={13} />
           </button>
         </span>
+        <span>Stills</span>
+        <span>Notes</span>
         <span>Drums</span>
       </div>
       <div className="video-lane-body" onClick={seek}>
@@ -317,11 +373,58 @@ function Lanes({ board, timeline }: { board: studio.Storyboard; timeline: Timeli
             )
           })}
         </div>
+        <div className="video-lane video-stills-lane">
+          {board.stills.map((id) => {
+            const file = files?.[id]
+            if (!file || file.seconds === null) return null
+            return (
+              <button
+                key={id}
+                type="button"
+                className="video-still-thumb"
+                style={{ left: pct(file.seconds) }}
+                title={file.name}
+                onClick={(event) => {
+                  event.stopPropagation()
+                  setViewing(id)
+                }}
+              >
+                <StoredImage fileId={id} alt={file.name} />
+              </button>
+            )
+          })}
+        </div>
+        <div className="video-lane">
+          {board.comments.map((comment) => {
+            const at = commentSeconds(comment, project, board, timeline)
+            if (at === null) return null
+            const target = comment.target
+            return (
+              <button
+                key={comment.id}
+                type="button"
+                className={`video-note is-${comment.status}`}
+                style={{ left: pct(at) }}
+                title={comment.text}
+                onClick={(event) => {
+                  event.stopPropagation()
+                  if (target.kind === 'scene') select({ kind: 'videoScene', sceneId: target.sceneId })
+                  else if (target.kind === 'text') select({ kind: 'videoText', textId: target.textId })
+                  else if (target.kind === 'still') setViewing(target.fileId)
+                  else select({ kind: 'none' })
+                }}
+              >
+                {comment.author === 'director' ? 'D' : '•'}
+              </button>
+            )
+          })}
+        </div>
         <div className="video-lane">
           <CueTicks timeline={timeline} />
         </div>
         <span className="video-playhead" style={{ left: `${playhead * 100}%` }} />
       </div>
+      {viewing && <StillViewer board={board} fileId={viewing} onClose={() => setViewing(null)} />}
     </div>
   )
 }
@@ -333,11 +436,16 @@ export function Video() {
   // Video edits leave the analysis valid; music edits make it stale, and the
   // preview keeps the old envelopes until the mix is analyzed again.
   const timeline = useMemo(() => (board ? new Timeline(project, board, analysis.features) : null), [project, board, analysis.features])
+  const [drawer, setDrawer] = useState<DrawerTab | null>(null)
   if (!board || !timeline) return <EmptyVideo />
   return (
     <div className="video-view">
-      <VideoBar board={board} />
-      <Preview board={board} timeline={timeline} />
+      <VideoBar board={board} timeline={timeline} drawer={drawer} onDrawer={setDrawer} />
+      <StageBar board={board} />
+      <div className={`video-middle${drawer ? ' with-drawer' : ''}`}>
+        <Preview board={board} timeline={timeline} />
+        {drawer && <VideoDrawer board={board} tab={drawer} onTab={setDrawer} onClose={() => setDrawer(null)} />}
+      </div>
       <Lanes board={board} timeline={timeline} />
     </div>
   )

@@ -1,8 +1,10 @@
 import { Trash2 } from 'lucide-react'
 import { type CSSProperties, type ReactNode, useState } from 'react'
 import { studio } from '@reborn/studio-core'
-import { LOOKS, lookById } from '@reborn/video'
-import { type DispatchOptions, dispatch, select, useStudio } from '../state/store'
+import { LOOKS, chapters, footageCredits, lookById } from '@reborn/video'
+import { type DispatchOptions, dispatch, select, toast, useStudio } from '../state/store'
+import { applyPreset, libraryItem, useLibrary } from '../video/library'
+import { Comments, STAGE_LABELS, StoredImage } from './VideoReview'
 
 // Inspector panels for the Video view: the selected scene, the selected text
 // item, and the storyboard itself. Every field accepts a number or an
@@ -157,14 +159,14 @@ function TimeField({ label, value, onCommit }: { label: string; value: studio.Ti
   )
 }
 
-function Chips<T extends string>({ options, value, onChange, label }: { options: readonly T[]; value: readonly T[]; onChange: (next: T[]) => void; label: string }) {
+function Chips<T extends string>({ options, value, onChange, label, labels }: { options: readonly T[]; value: readonly T[]; onChange: (next: T[]) => void; label: string; labels?: Record<T, string> }) {
   return (
     <div className="insp-row" role="group" aria-label={label}>
       {options.map((option) => {
         const on = value.includes(option)
         return (
           <button key={option} type="button" className={`chip-btn${on ? ' is-on' : ''}`} aria-pressed={on} onClick={() => onChange(on ? value.filter((v) => v !== option) : [...value, option])}>
-            {option}
+            {labels?.[option] ?? option}
           </button>
         )
       })}
@@ -197,6 +199,7 @@ const sceneEdit = (sceneId: string, params: Record<string, unknown>, options: Di
 
 export function VideoScenePanel({ sceneId }: { sceneId: string }) {
   const scene = useStudio((s) => s.project.video?.storyboards.flatMap((b) => b.scenes).find((x) => x.id === sceneId))
+  const board = useStudio((s) => s.project.video?.storyboards.find((b) => b.scenes.some((x) => x.id === sceneId)))
   const project = useStudio((s) => s.project)
   const [openLayer, setOpenLayer] = useState<number | null>(null)
   if (!scene) return null
@@ -215,6 +218,7 @@ export function VideoScenePanel({ sceneId }: { sceneId: string }) {
         <input type="text" defaultValue={scene.name} key={scene.id + scene.name} onKeyDown={keep} onBlur={(event) => event.target.value !== scene.name && edit({ name: event.target.value }, 'Rename video scene')} />
       </label>
       <TimeField label="Starts at" value={scene.start} onCommit={(start) => edit({ start }, 'Move video scene')} />
+      {scene.preset && <PresetPin scene={scene} />}
       <Group title="Look">
         <LookPicker label="Look" value={scene.look} layer={false} onChange={(id) => edit({ look: id }, 'Change look')} />
         {look && (
@@ -287,6 +291,7 @@ export function VideoScenePanel({ sceneId }: { sceneId: string }) {
         <p className="muted small">Cut events switch the graphic in Strobe Deck and count up the cut and cutT values in expressions.</p>
         <NumberField label="Crossfade in (s)" value={scene.xfade} min={0} max={30} onCommit={(xfade) => edit({ xfade }, 'Change crossfade')} />
       </Group>
+      <SceneFootage scene={scene} />
       <Group title="Camera travel">
         <div className="vparams">
           {(['base', 'kick', 'snare', 'bass'] as const).map((key) => (
@@ -313,13 +318,86 @@ export function VideoScenePanel({ sceneId }: { sceneId: string }) {
           Remove scene
         </button>
       </div>
+      {board && <Comments board={board} target={{ kind: 'scene', sceneId: scene.id }} title="Comments on this scene" />}
       <ExpressionHelp />
     </>
   )
 }
 
+/** Shows which library preset a scene came from, and offers its newer version. */
+function PresetPin({ scene }: { scene: studio.VideoScene }) {
+  useLibrary()
+  const pin = scene.preset!
+  const latest = libraryItem(pin.id)
+  const newer = latest && latest.version > pin.version
+  return (
+    <p className="muted small vpin">
+      From the library preset “{pin.name}”, version {pin.version}.
+      {newer && (
+        <>
+          {' '}Version {latest.version} is available.{' '}
+          <button type="button" className="chip-btn" onClick={() => applyPreset(latest, scene.id)}>
+            Update to latest
+          </button>
+        </>
+      )}
+    </p>
+  )
+}
+
+/** Picks the downloaded footage a scene plays and how it plays it. */
+function SceneFootage({ scene }: { scene: studio.VideoScene }) {
+  const board = useStudio((s) => s.project.video?.storyboards.find((b) => b.scenes.some((x) => x.id === scene.id)))
+  const usable = board?.footage.filter((clip) => clip.status === 'approved' || clip.status === 'fetched') ?? []
+  const edit = (params: Record<string, unknown>, label: string) => dispatch({ type: 'video.scene.update', params: { sceneId: scene.id, ...params } }, { label })
+  const footageLook = scene.look.startsWith('footage')
+  if (!usable.length && !footageLook) return null
+  return (
+    <Group title="Footage">
+      {!usable.length && <p className="muted small">No approved footage yet. Search for clips in the Footage panel below the preview.</p>}
+      <ul className="vclip-pick">
+        {usable.map((clip) => {
+          const on = scene.clips.includes(clip.id)
+          return (
+            <li key={clip.id}>
+              <label>
+                <input type="checkbox" checked={on} onChange={() => edit({ clips: on ? scene.clips.filter((id) => id !== clip.id) : [...scene.clips, clip.id] }, on ? 'Remove clip from scene' : 'Add clip to scene')} />
+                {clip.thumbnail && <img src={clip.thumbnail} alt="" />}
+                <span>
+                  {clip.title}
+                  <small className="muted">{clip.status === 'fetched' ? `${clip.duration.toFixed(0)} s` : 'not downloaded yet'}</small>
+                </span>
+              </label>
+            </li>
+          )
+        })}
+      </ul>
+      {scene.clips.length > 0 && !footageLook && <p className="muted small">Pick Footage Grade or Footage Kaleido as the look to show these clips.</p>}
+      <div className="vparams">
+        <label className="vfield">
+          <span className="vfield-label">Order</span>
+          <select value={scene.clipOrder} onChange={(event) => edit({ clipOrder: event.target.value }, 'Change clip order')}>
+            <option value="cycle">In order</option>
+            <option value="shuffle">Shuffled</option>
+          </select>
+        </label>
+        <label className="vfield">
+          <span className="vfield-label">Each clip starts at (s)</span>
+          <input type="text" defaultValue={scene.clipStart === 'random' ? 'random' : String(scene.clipStart)} key={String(scene.clipStart)} onKeyDown={keep} onBlur={(event) => {
+            const value = event.target.value.trim()
+            const next = value === '' || value === 'random' ? -1 : Number(value)
+            if (Number.isFinite(next)) edit({ clipStart: next }, 'Change clip start')
+          }} />
+        </label>
+        <NumberField label="Speed" value={scene.clipSpeed} step={0.1} min={0.1} max={4} onCommit={(clipSpeed) => edit({ clipSpeed }, 'Change clip speed')} />
+      </div>
+    </Group>
+  )
+}
+
 export function VideoTextPanel({ textId }: { textId: string }) {
   const item = useStudio((s) => s.project.video?.storyboards.flatMap((b) => b.text).find((x) => x.id === textId))
+  const board = useStudio((s) => s.project.video?.storyboards.find((b) => b.text.some((x) => x.id === textId)))
   if (!item) return null
   const edit = (params: Record<string, unknown>, label = 'Change video text') => dispatch({ type: 'video.text.update', params: { textId: item.id, ...params } }, { label })
   return (
@@ -396,6 +474,7 @@ export function VideoTextPanel({ textId }: { textId: string }) {
           Remove text
         </button>
       </div>
+      {board && <Comments board={board} target={{ kind: 'text', textId: item.id }} title="Comments on this text" />}
     </>
   )
 }
@@ -421,13 +500,52 @@ export function VideoBoardPanel() {
         <input type="text" defaultValue={board.name} key={board.id + board.name} onKeyDown={keep} onBlur={(event) => event.target.value !== board.name && edit({ name: event.target.value }, 'Rename storyboard')} />
       </label>
       <Group title="Brief">
-        {(['goal', 'mood', 'notes'] as const).map((key) => (
+        {(['goal', 'mood', 'words', 'notes'] as const).map((key) => (
           <label key={key} className="field">
-            <span className="field-label">{key === 'goal' ? 'What the video is for' : key === 'mood' ? 'Mood, colors, references' : 'Notes and things to avoid'}</span>
+            <span className="field-label">{BRIEF_LABELS[key]}</span>
             <textarea className="vtextarea" rows={2} defaultValue={board.brief[key]} key={board.id + board.brief[key]} onKeyDown={keep} onBlur={(event) => event.target.value !== board.brief[key] && edit({ brief: { [key]: event.target.value } }, 'Edit brief')} />
           </label>
         ))}
       </Group>
+      <Group title="Footage">
+        <label className="vcheck">
+          <input type="checkbox" checked={board.brief.footage.enabled} onChange={(event) => edit({ brief: { footage: { enabled: event.target.checked } } }, event.target.checked ? 'Allow footage' : 'Turn footage off')} />
+          Use stock footage
+        </label>
+        {board.brief.footage.enabled && (
+          <>
+            <label className="vfield">
+              <span className="vfield-label">Licences</span>
+              <select value={board.brief.footage.licences} onChange={(event) => edit({ brief: { footage: { licences: event.target.value } } }, 'Change licence policy')}>
+                <option value="safe">Free to use: CC0, public domain, Pexels, Pixabay</option>
+                <option value="attribution">Also CC BY (credits required)</option>
+                <option value="sharealike">Also CC BY-SA (may require the same licence)</option>
+              </select>
+            </label>
+            <div className="insp-row" role="group" aria-label="Footage sources">
+              {studio.FOOTAGE_PROVIDERS.map((provider) => {
+                const on = board.brief.footage.providers.includes(provider)
+                return (
+                  <button key={provider} type="button" className={`chip-btn${on ? ' is-on' : ''}`} aria-pressed={on} onClick={() => edit({ brief: { footage: { providers: on ? board.brief.footage.providers.filter((p) => p !== provider) : [...board.brief.footage.providers, provider] } } }, 'Change footage sources')}>
+                    {PROVIDER_LABELS[provider]}
+                  </button>
+                )
+              })}
+            </div>
+            <div className="vparams">
+              <NumberField label="Clip limit" value={board.brief.footage.maxClips} step={1} min={0} max={200} onCommit={(maxClips) => edit({ brief: { footage: { maxClips } } }, 'Change footage limit')} />
+              <NumberField label="Download limit (MB)" value={board.brief.footage.maxMegabytes} step={50} min={0} max={20000} onCommit={(maxMegabytes) => edit({ brief: { footage: { maxMegabytes } } }, 'Change footage limit')} />
+            </div>
+          </>
+        )}
+      </Group>
+      <Group title="Director">
+        <p className="muted small">The Director asks before moving past each stage. Tick a stage to let it move on without asking when no comments are open.</p>
+        <Chips label="Stages the Director may approve" options={studio.VIDEO_STAGES.filter((s) => s !== 'brief')} value={board.autoAdvance} onChange={(autoAdvance) => edit({ autoAdvance }, 'Change auto-advance')} labels={STAGE_LABELS} />
+      </Group>
+      <Comments board={board} title="Comments and requests" />
+      <StillsGroup board={board} />
+      <Publishing board={board} />
       <Group title="Master">
         <ExprField label="Fade" value={board.fade} placeholder="1" hint="Master brightness. The default fades in over 2 s and out over the last 3 s." onCommit={(value) => edit({ fade: String((Array.isArray(value) ? value[0] : value) ?? 1) }, 'Change fade')} />
         <div className="vparams">
@@ -439,6 +557,45 @@ export function VideoBoardPanel() {
       </Group>
       <ExpressionHelp />
     </>
+  )
+}
+
+const BRIEF_LABELS = { goal: 'What the video is for', mood: 'Mood, colors, references', words: 'Words and titles to show', notes: 'Notes and things to avoid' } as const
+
+const PROVIDER_LABELS: Record<studio.FootageProvider, string> = { pexels: 'Pexels', pixabay: 'Pixabay', wikimedia: 'Wikimedia Commons', archive: 'Internet Archive' }
+
+/** Contact sheets for this storyboard, newest first. */
+function StillsGroup({ board }: { board: studio.Storyboard }) {
+  const files = useStudio((s) => s.project.video?.files ?? {})
+  const sheets = board.stills.map((id) => files[id]).filter((f): f is studio.VideoFile => f?.kind === 'sheet').reverse()
+  if (!sheets.length) return null
+  return (
+    <Group title="Contact sheets">
+      {sheets.slice(0, 3).map((sheet) => (
+        <figure key={sheet.id} className="vsheet">
+          <StoredImage fileId={sheet.id} alt={sheet.name} />
+          <figcaption className="muted small">{sheet.name.replace(/\.png$/, '')}</figcaption>
+        </figure>
+      ))}
+    </Group>
+  )
+}
+
+/** Chapters and footage credits to paste into a video description. */
+function Publishing({ board }: { board: studio.Storyboard }) {
+  const project = useStudio((s) => s.project)
+  const text = [chapters(project), footageCredits(board)].filter(Boolean).join('\n\n')
+  if (!text) return null
+  return (
+    <Group title="Description">
+      <textarea className="vtextarea vmono" rows={6} readOnly value={text} onKeyDown={keep} />
+      <div className="insp-row">
+        <button type="button" className="chip-btn" onClick={() => void navigator.clipboard.writeText(text).then(() => toast('Copied the description'))}>
+          Copy
+        </button>
+      </div>
+      <p className="muted small">Export MP4 also saves this next to the video.</p>
+    </Group>
   )
 }
 

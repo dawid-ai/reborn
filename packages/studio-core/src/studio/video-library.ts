@@ -77,18 +77,11 @@ export interface LibraryItem {
   source: { project: string; storyboard: string } | null
   /** PNG or JPEG data URL. */
   preview: string
+  /** Set while the item is a suggestion waiting for the user to keep or dismiss it. */
+  pending: { reason: string; proposedBy: 'user' | 'director' } | null
   preset?: ScenePreset
   template?: StoryboardTemplate
   footage?: LibraryFootage
-}
-
-/** Library items waiting for the user to accept them, proposed by the Director or the user. */
-export interface LibraryPromotion {
-  id: string
-  item: LibraryItem
-  reason: string
-  proposedBy: 'user' | 'director'
-  at: string
 }
 
 export function presetFromScene(scene: VideoScene): ScenePreset {

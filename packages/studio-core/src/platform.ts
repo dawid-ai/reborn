@@ -1,5 +1,7 @@
 import type { ProjectState } from './model'
 import type { StudioProject } from './studio/model'
+import type { FootageProvider, LicenceKind, LicencePolicy } from './studio/video'
+import type { LibraryItem } from './studio/video-library'
 import type { ApiEvent } from './api'
 import type { ProjectAssetKind, ProjectDocument } from './project-file'
 
@@ -87,6 +89,39 @@ export interface JobUpdate {
 }
 
 export type LogLevel = 'info' | 'warn' | 'error'
+
+export interface FootageSearchRequest {
+  query: string
+  providers: FootageProvider[]
+  /** Results with licences outside this policy are left out. */
+  licences: LicencePolicy
+  perProvider?: number
+}
+
+/** A clip a provider offers, in the shape video.footage.add takes. */
+export interface FootageCandidate {
+  provider: FootageProvider
+  sourceId: string
+  title: string
+  page: string
+  author: string
+  licence: LicenceKind
+  licenceName: string
+  licenceUrl: string
+  /** A small image data URL fetched through the main process, or empty. */
+  thumbnail: string
+  url: string
+  width: number
+  height: number
+  duration: number
+  query: string
+}
+
+export interface FootageSearchResult {
+  candidates: FootageCandidate[]
+  /** Providers that failed, for example without an API key. */
+  errors: { provider: string; message: string }[]
+}
 
 /** Song grid passed to the sidecar so tempo-aware reports number bars like RE:BORN. */
 export interface DeepTempo {
@@ -200,8 +235,21 @@ export interface DesktopBridge {
   packProject(path: string): Promise<{ jobId: string } | null>
   cancelJob(id: string): Promise<void>
   saveWav(data: ArrayBuffer, suggestedName: string): Promise<string | null>
-  /** Asks where to save an exported MP4 and writes it. Null when cancelled. */
-  saveVideo(data: ArrayBuffer, suggestedName: string): Promise<string | null>
+  /** Visual Library items saved in the app's user data. */
+  libraryList(): Promise<LibraryItem[]>
+  /** Saves a library item, bumping its version; footage items pass their clip bytes the first time. */
+  librarySave(item: LibraryItem, footage?: ArrayBuffer): Promise<LibraryItem>
+  libraryRemove(id: string): Promise<void>
+  libraryReadFootage(id: string): Promise<ArrayBuffer | null>
+  /** Which footage providers have an API key stored. */
+  footageKeys(): Promise<{ pexels: boolean; pixabay: boolean }>
+  /** Stores (string) or removes (null) footage API keys in the OS credential store. */
+  footageSetKeys(patch: { pexels?: string | null; pixabay?: string | null }): Promise<{ pexels: boolean; pixabay: boolean }>
+  footageSearch(request: FootageSearchRequest): Promise<FootageSearchResult>
+  /** Downloads an approved clip from a footage provider, within a byte limit. */
+  footageDownload(request: { url: string; maxBytes: number }): Promise<{ data: ArrayBuffer; mimeType: string }>
+  /** Asks where to save an exported MP4 and writes it, plus any text files beside it. Null when cancelled. */
+  saveVideo(data: ArrayBuffer, suggestedName: string, extras?: { name: string; text: string }[]): Promise<string | null>
   writeRecovery(state: { project?: ProjectState; studio?: StudioProject; path: string | null }): void
   takeRecovery(): Promise<RecoveryState | null>
   /** Keeps the latest unsaved state of a project on disk. */
@@ -282,6 +330,14 @@ export const IPC = {
   jobUpdate: 'job:update',
   saveWav: 'wav:save',
   saveVideo: 'video:save',
+  libraryList: 'library:list',
+  librarySave: 'library:save',
+  libraryRemove: 'library:remove',
+  libraryReadFootage: 'library:read-footage',
+  footageKeys: 'footage:keys',
+  footageSetKeys: 'footage:set-keys',
+  footageSearch: 'footage:search',
+  footageDownload: 'footage:download',
   writeRecovery: 'recovery:write',
   takeRecovery: 'recovery:take',
   writeAutosave: 'autosave:write',

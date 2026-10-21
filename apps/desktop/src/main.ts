@@ -2,7 +2,7 @@ import { BrowserWindow, Menu, app, dialog, ipcMain, net, protocol, safeStorage, 
 import { existsSync, statSync } from 'node:fs'
 import { mkdir } from 'node:fs/promises'
 import { randomUUID } from 'node:crypto'
-import { basename, extname, join, normalize, resolve, sep } from 'node:path'
+import { basename, dirname, extname, join, normalize, resolve, sep } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import {
   IPC,
@@ -11,6 +11,7 @@ import {
   PROJECT_FILE,
   type DeepTempo,
   type DesktopAssetPayload,
+  type FootageSearchRequest,
   type IsmailGenerateRequest,
   type JobUpdate,
   type LogLevel,
@@ -26,7 +27,9 @@ import {
 import { AgentService } from './agent'
 import { DeepAnalysis } from './deep-analysis'
 import { ApiServer, type RenderedFile } from './api-server'
+import { FootageService } from './footage'
 import { JobRunner } from './jobs'
+import { LibraryStore } from './library'
 import { isExternalLink } from './links'
 import { packProjectDirectory, readProjectPath, unpackProject, writeAtomic, writeProjectDirectory } from './project-dir'
 import { SessionStore } from './session'
@@ -60,6 +63,8 @@ let api: ApiServer | null = null
 let agent: AgentService
 let deep: DeepAnalysis
 let updates: Updater
+let library: LibraryStore
+let footageService: FootageService
 const pendingRpc = new Map<string, { resolve: (reply: { status: number; body: unknown }) => void; timer: ReturnType<typeof setTimeout> }>()
 
 function rendererRpc(route: 'status' | 'execute' | 'runtime', body: unknown, timeoutMs = 30_000): Promise<{ status: number; body: unknown }> {
@@ -239,7 +244,7 @@ async function saveWav(input: unknown, suggestedName: string): Promise<string | 
   return target
 }
 
-async function saveVideo(input: unknown, suggestedName: string): Promise<string | null> {
+async function saveVideo(input: unknown, suggestedName: string, extras: unknown): Promise<string | null> {
   const data = toArrayBuffer(input)
   if (!data) throw new Error('Expected video data.')
   const preset = presetPath('VIDEO')
@@ -250,6 +255,12 @@ async function saveVideo(input: unknown, suggestedName: string): Promise<string 
   })).filePath
   if (!target) return null
   await writeAtomic(target, new Uint8Array(data))
+  // Text files (the description and credits) go beside the video, by base name only.
+  for (const extra of Array.isArray(extras) ? extras.slice(0, 4) : []) {
+    const name = typeof extra?.name === 'string' ? basename(extra.name) : ''
+    if (!/\.txt$/i.test(name) || typeof extra.text !== 'string') continue
+    await writeAtomic(join(dirname(target), name), extra.text.slice(0, 200_000))
+  }
   log('info', `Exported video to ${target} (${data.byteLength} bytes).`)
   return target
 }
@@ -435,7 +446,24 @@ function registerIpc() {
   handle(IPC.packProject, (path: string) => packProject(String(path)))
   handle(IPC.cancelJob, async (id: string) => jobs.cancel(String(id)))
   handle(IPC.saveWav, (data: unknown, name: string) => saveWav(data, String(name ?? 'export.wav')))
-  handle(IPC.saveVideo, (data: unknown, name: string) => saveVideo(data, String(name ?? 'video.mp4')))
+  handle(IPC.saveVideo, (data: unknown, name: string, extras: unknown) => saveVideo(data, String(name ?? 'video.mp4'), extras))
+  handle(IPC.libraryList, () => library.list())
+  handle(IPC.librarySave, (item: studio.LibraryItem, data: unknown) => library.save(item, data === undefined || data === null ? null : toArrayBuffer(data)))
+  handle(IPC.libraryRemove, (id: string) => library.remove(String(id)))
+  handle(IPC.libraryReadFootage, (id: string) => library.readFootage(String(id)))
+  handle(IPC.footageKeys, () => footageService.keyStatus())
+  handle(IPC.footageSetKeys, (patch: { pexels?: string | null; pixabay?: string | null }) => footageService.setKeys(patch ?? {}))
+  handle(IPC.footageSearch, (request: FootageSearchRequest) => {
+    if (!request || typeof request.query !== 'string' || !Array.isArray(request.providers)) throw new Error('Expected a query and providers.')
+    const providers = request.providers.filter((p) => (studio.FOOTAGE_PROVIDERS as readonly string[]).includes(p))
+    const licences = (studio.LICENCE_POLICIES as readonly string[]).includes(request.licences) ? request.licences : 'safe'
+    return footageService.search({ query: request.query, providers, licences, perProvider: Number(request.perProvider) || undefined })
+  })
+  handle(IPC.footageDownload, (request: { url: string; maxBytes: number }) => {
+    const maxBytes = Math.min(2_000_000_000, Math.max(0, Number(request?.maxBytes) || 0))
+    if (!maxBytes) throw new Error('The brief has no download budget left.')
+    return footageService.download(String(request?.url ?? ''), maxBytes)
+  })
   handle(IPC.takeRecovery, () => session.takeRecovery())
   handle(IPC.writeAutosave, async (state: { studio?: studio.StudioProject; path?: unknown }) => {
     if (state?.studio && typeof state.studio.id === 'string') await session.writeAutosave(state.studio, typeof state.path === 'string' ? state.path : null)
@@ -542,6 +570,8 @@ if (!app.requestSingleInstanceLock()) {
     jobs = new JobRunner(sendJob, (message) => log('info', message))
     process.on('uncaughtException', (error) => log('error', `Main process error: ${error.stack ?? error.message}`))
     agent = new AgentService(app.getPath('userData'), safeStorage)
+    library = new LibraryStore(app.getPath('userData'))
+    footageService = new FootageService({ directory: app.getPath('userData'), secrets: safeStorage, version: app.getVersion() })
     deep = new DeepAnalysis({
       sidecarDir: SIDECAR_DIR,
       dataDir: app.getPath('userData'),

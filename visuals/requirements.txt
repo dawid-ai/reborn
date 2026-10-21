@@ -1,0 +1,5 @@
+numpy
+scipy
+moderngl
+pillow
+fonttools

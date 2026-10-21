@@ -113,6 +113,7 @@ try {
   check(bytes.subarray(4, 8).toString() === 'ftyp', 'the export is not an MP4')
   const boxes = bytes.toString('latin1')
   check(/vide/.test(boxes) && /soun/.test(boxes), 'the MP4 is missing a video or audio track')
+  check(boxes.includes('mp4a'), 'the MP4 audio is not AAC')
   console.log(`exported ${path} (${bytes.length} bytes)`)
   await page.screenshot({ path: `${OUT}/video-after-export.png` })
 } catch (error) {

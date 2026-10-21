@@ -59,4 +59,8 @@ SOFTWARE.```
 
 ## Mediabunny
 
-The app includes [Mediabunny](https://github.com/Vanilagy/mediabunny) by Vanilagy, unmodified, to write MP4 files from the **Video** view. It's licensed under the [Mozilla Public License 2.0](https://www.mozilla.org/MPL/2.0/); its source is available from its repository and from the `mediabunny` package on npm.
+The app includes [Mediabunny](https://github.com/Vanilagy/mediabunny) and its AAC encoder extension, `@mediabunny/aac-encoder`, by Vanilagy, unmodified, to write MP4 files from the **Video** view. Both are licensed under the [Mozilla Public License 2.0](https://www.mozilla.org/MPL/2.0/); their source is available from the repository and from the `mediabunny` and `@mediabunny/aac-encoder` packages on npm.
+
+## FFmpeg
+
+The AAC encoder extension contains a WebAssembly build of [FFmpeg](https://ffmpeg.org/)'s native AAC encoder from libavcodec, which is licensed under the [GNU Lesser General Public License 2.1](https://www.gnu.org/licenses/old-licenses/lgpl-2.1.html) or later. It runs as a separate module that loads only when the system has no AAC encoder of its own. FFmpeg's source is available from [ffmpeg.org](https://ffmpeg.org/download.html), and the build scripts from the Mediabunny repository.

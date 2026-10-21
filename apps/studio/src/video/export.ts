@@ -1,4 +1,5 @@
-import { AudioBufferSource, BufferTarget, CanvasSource, Mp4OutputFormat, Output, Quality, getFirstEncodableAudioCodec, getFirstEncodableVideoCodec } from 'mediabunny'
+import { registerAacEncoder } from '@mediabunny/aac-encoder'
+import { AudioBufferSource, BufferTarget, CanvasSource, Mp4OutputFormat, Output, Quality, canEncodeAudio, getFirstEncodableAudioCodec, getFirstEncodableVideoCodec } from 'mediabunny'
 import { studio } from '@reborn/studio-core'
 import { Timeline, VideoRenderer } from '@reborn/video'
 import { desktop } from '../platform/desktop'
@@ -45,6 +46,19 @@ export async function loadVideoFonts(board: studio.Storyboard): Promise<void> {
 }
 
 let running: AbortController | null = null
+let aacReady: Promise<void> | null = null
+
+/**
+ * Electron's WebCodecs has no AAC encoder, and AAC is what every player and
+ * platform accepts in MP4. Where the platform lacks one, a WebAssembly build
+ * of FFmpeg's AAC encoder stands in.
+ */
+function ensureAac(): Promise<void> {
+  aacReady ??= canEncodeAudio('aac').then((native) => {
+    if (!native) registerAacEncoder()
+  })
+  return aacReady
+}
 
 export async function exportVideo(options: VideoExportOptions): Promise<void> {
   if (running) return toast('A video export is already running.')
@@ -69,6 +83,7 @@ export async function exportVideo(options: VideoExportOptions): Promise<void> {
     const first = Math.round(from * fps)
     const last = Math.round(Math.min(to, audioSeconds) * fps)
 
+    await ensureAac()
     const videoQuality = new Quality({ bitrate: videoBitrate(width, height, fps), bitrateMode: 'variable' })
     const audioQuality = new Quality({ bitrate: 320_000 })
     const videoCodec = await getFirstEncodableVideoCodec(['avc', 'hevc', 'vp9', 'av1'], { width, height, frameRate: fps, quality: videoQuality })

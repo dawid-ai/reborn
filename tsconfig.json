@@ -20,6 +20,9 @@
       "path": "./packages/analysis"
     },
     {
+      "path": "./packages/video"
+    },
+    {
       "path": "./apps/studio"
     }
   ]

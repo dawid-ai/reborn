@@ -7,7 +7,7 @@ import { ONBOARDING } from './onboarding'
 // searchable guide, and the shortcut map (remappable).
 
 const GUIDE: { title: string; body: string; tags: string }[] = [
-  { title: 'The layout', body: 'The transport stays on top and the song stays visible. Selecting anything (a track, clip, step, section, pad, or channel) changes the inspector on the right and the editor in the dock below. Views change only the center: Arrange (1), Build (2), Mix (3), Perform (4).', tags: 'shell inspector dock views' },
+  { title: 'The layout', body: 'The transport stays on top and the song stays visible. Selecting anything (a track, clip, step, section, pad, or channel) changes the inspector on the right and the editor in the dock below. Views change only the center: Arrange (1), Build (2), Mix (3), Perform (4), Video (5).', tags: 'shell inspector dock views' },
   { title: 'Patterns and clips', body: 'A pattern stores notes or hits. A clip places a pattern on the timeline. Repeats share their pattern (linked) until you use Make unique. Patterns can be 1–64 steps with their own step size, so polymeters are possible.', tags: 'clip pattern linked unique length' },
   { title: 'Arranging', body: 'Drag clips to move them (Shift for quarter bars, Alt to copy as a linked repeat), drag the right edge to resize, and double-click an empty lane to create one. Hover a section boundary and click +8 to insert eight bars; later material moves right and nothing is appended to the end.', tags: 'arrange insert time sections move resize' },
   { title: 'Automation and locks', body: 'Open a track’s lanes with the arrow in its header and add a lane for any parameter. Click to add points, drag to move, Alt-click to remove. With record armed, turning macros while playing writes automation. Select a step and hold Alt while turning a knob to lock a value to that step. Locks win over automation, which wins over the device value.', tags: 'automation lock lanes record macros' },
@@ -15,6 +15,7 @@ const GUIDE: { title: string; body: string; tags: string }[] = [
   { title: 'Mixing and diagnostics', body: 'Every track has EQ, a DJ filter, and drive inserts, a fader and pan, and sends to the shared Delay and Plate returns. Pre-fader sends ignore mute — the usual reason echo is still audible. The signal trace in Mix lists every path into each return. Analyze renders the song and measures loudness, true peak, and band balance per section.', tags: 'mix send return trace echo analyze loudness' },
   { title: 'The agent', body: 'The agent reads the project, measures before judging the mix, and proposes changes. Proposals appear in the inspector with ghost values on the controls they touch. Preview, then apply all, apply some, or reject. Applying is one undo step labeled Agent.', tags: 'agent proposal claude preview' },
   { title: 'CLI and MCP', body: 'With the desktop app running, the reborn command can read and edit the open project (for example, reborn pattern write 808.kick "X...X...X...X..."). reborn mcp connects external agents; their edits arrive as proposals unless you allow direct edits.', tags: 'cli mcp api reborn command' },
+  { title: 'Music video', body: 'Video (5) builds a storyboard with one scene per section and previews it live with the transport. Cuts follow the real drum hits; clips named riser and impact drive builds and flashes. Any scene setting takes a number or an expression such as 0.5+0.5*kick. Analyze mix adds bass and hat motion; Export MP4 renders the video with the mix as its audio.', tags: 'video storyboard scene look export mp4 visuals' },
   { title: 'Saving', body: 'The desktop edition saves .reborn folders with their audio, never rewriting unchanged samples, and Pack Project makes one shareable file. Unsaved work is recovered after a crash. The browser edition autosaves locally and downloads project files.', tags: 'save open pack recover' },
 ]
 
@@ -23,6 +24,7 @@ const VIEW_TIPS: Record<string, string> = {
   build: 'Build: pick a pattern per track in each scene column, then launch scenes. They start on the next bar. Arm record to write launches into the arrangement.',
   mix: 'Mix: select a strip to see its full signal path in the inspector. Use Analyze for measurements and the trace to find unexpected echo.',
   perform: 'Perform: big targets for playing live. With record armed, every move here becomes automation.',
+  video: 'Video: select a scene or text item in the lanes to edit it in the inspector. Press Space to preview; export a draft to check timing before the full render.',
 }
 
 function ShortcutRow({ action, keys }: { action: string; keys: string }) {

@@ -26,6 +26,7 @@ The checklist in the status bar tracks the first six things to try.
 | `2` | **Build** | Launch scenes (one pattern per track) live. Arm record (`R`) to write launches into the arrangement. |
 | `3` | **Mix** | Set levels, sends, and returns; trace any channel to the master; analyze the mix. |
 | `4` | **Perform** | Play macros, the crossfader, and decks with large targets. With record armed, moves become automation. |
+| `5` | **Video** | Storyboard a music video cut to the song's drum hits, risers, and impacts, preview it live, and export an MP4. |
 
 The dock always shows the editor for the current selection. The inspector on the right shows every setting of the selected track, clip, or step.
 
@@ -105,6 +106,25 @@ The **Generate** tab and the **Agent** panel do different jobs. **Generate** mak
 With the Claude CLI provider, the agent reaches only RE:BORN's own tools. It can't run commands, read your files, or use other services you've connected to Claude Code.
 
 Other agents and scripts can drive RE:BORN too. See [CLI and MCP](cli-and-mcp.md).
+
+## Make a music video
+
+The **Video** view (`5`) turns the song into a beat-synced music video. Visuals are cut to the hits the drum patterns actually play, with swing and microtiming, so they land exactly with the music.
+
+1. Click **Create storyboard**. You get one scene per section, chosen by the section's name: intros drift, builds dive and strobe into a whiteout, drops hit hard and dark, switch sections strobe on the drums, and bridges turn into kaleidoscopes.
+2. Press Space. The preview follows the transport, and the lanes below show sections, scenes, text, and the kick, snare, and hat hits that drive the cuts.
+3. Click a scene to edit it in the inspector: its look, the look's parameters, up to three layers, cut events, camera travel, and post effects such as trails, bloom, strobe, and whiteout.
+4. Click **Analyze mix** so bass, sub, and hi-hat energy can drive motion too. Drum hits work without it. After you change the music, the view tells you the analysis is out of date; nothing re-renders on its own.
+5. Click **Export draft** for a quick half-size check, or **Export MP4** for the full-size video with the mix as its audio.
+
+Every field takes a number or an expression evaluated each frame, for example `0.004+0.006*kick` or `t*.15`. **Expressions** at the bottom of the inspector lists what you can use: song and scene time, drum pulses, band envelopes, riser progress, and time to the next impact. Clips with "riser" in their name drive `rise` and `rstrobe`; clips with "impact" in their name fire a flash, shake, and color split.
+
+Scenes and text are timed to section markers, so they follow along when you change the tempo or move a section. A scene whose section was deleted is marked in red.
+
+- **+** in the **Scenes** lane adds a scene at the playhead. Double-click a scene to jump to it.
+- **T** in the **Text** lane adds text at the playhead. Text styles include a slam on the drop, words that change on each kick or snare, a typewriter, a flicker on the hats, and a ticker.
+- **Vertical copy** duplicates the storyboard at 1080×1920 for Shorts, Reels, and TikTok.
+- Storyboards are saved in the project, undo like any other edit, and can be edited from the CLI and MCP with the `video.*` commands.
 
 ## Save, share, and export
 

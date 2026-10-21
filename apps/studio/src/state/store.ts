@@ -11,7 +11,7 @@ type Origin = studio.Origin
 // which runs the shared command registry, records undo history with its
 // origin, and notifies the audio engine through a subscription.
 
-export type View = 'arrange' | 'build' | 'mix' | 'perform'
+export type View = 'arrange' | 'build' | 'mix' | 'perform' | 'video'
 
 export type Selection =
   | { kind: 'none' }
@@ -25,6 +25,8 @@ export type Selection =
   | { kind: 'return'; returnId: string }
   | { kind: 'master' }
   | { kind: 'lane'; trackId: string; param: string }
+  | { kind: 'videoScene'; sceneId: string }
+  | { kind: 'videoText'; textId: string }
 
 export interface HistoryEntry {
   label: string
@@ -129,6 +131,7 @@ export const DEFAULT_SHORTCUTS: Record<string, string> = {
   'view.build': '2',
   'view.mix': '3',
   'view.perform': '4',
+  'view.video': '5',
   'octave.down': 'Z',
   'octave.up': 'X',
   save: 'Ctrl+S',
@@ -307,6 +310,16 @@ const LABELS: Record<string, string> = {
   'parameter.set': 'Change parameter',
   'mixer.set': 'Change mixer',
   'send.set': 'Change send',
+  'video.storyboard.create': 'Create storyboard',
+  'video.storyboard.update': 'Change storyboard',
+  'video.storyboard.duplicate': 'Duplicate storyboard',
+  'video.storyboard.remove': 'Remove storyboard',
+  'video.scene.add': 'Add video scene',
+  'video.scene.update': 'Change video scene',
+  'video.scene.remove': 'Remove video scene',
+  'video.text.add': 'Add video text',
+  'video.text.update': 'Change video text',
+  'video.text.remove': 'Remove video text',
 }
 
 function describe(commands: Command[]): string {

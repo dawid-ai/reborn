@@ -6,6 +6,7 @@
   "dependencies": {
     "@reborn/audio-engine": "2.0.0-dev",
     "@reborn/studio-core": "2.0.0-dev",
-    "@reborn/analysis": "2.0.0-dev"
+    "@reborn/analysis": "2.0.0-dev",
+    "@reborn/video": "2.0.0-dev"
   }
 }

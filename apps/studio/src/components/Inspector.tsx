@@ -11,6 +11,7 @@ import { MAX_LOUDNESS, matchLoudness } from '../audio/loudness'
 import { modifiers } from '../state/modifiers'
 import { applyProposal, isPicked, rejectProposal, togglePick, usePreview } from '../state/proposals'
 import { type Selection, dispatch, getState, select, setPrefs, setState, useStudio } from '../state/store'
+import { VideoBoardPanel, VideoScenePanel, VideoTextPanel } from './VideoInspector'
 import { launchScene } from './Build'
 import { Knob, MuteIcon, Slider, Toggle } from './Controls'
 
@@ -962,6 +963,7 @@ function History() {
 export function Inspector({ overlay, onClose }: { overlay: boolean; onClose: () => void }) {
   const selection = useStudio((s) => s.selection)
   const track = useStudio((s) => (selection.kind === 'track' ? s.project.tracks.find((t) => t.id === selection.trackId) : undefined))
+  const videoView = useStudio((s) => s.view === 'video' && Boolean(s.project.video?.storyboards.length))
   let body: ReactNode
   if (selection.kind === 'track') body = track ? <TrackPanel track={track} /> : null
   else if (selection.kind === 'clip') body = <ClipPanel clipId={selection.clipId} />
@@ -973,6 +975,9 @@ export function Inspector({ overlay, onClose }: { overlay: boolean; onClose: () 
   else if (selection.kind === 'return') body = <ReturnPanel returnId={selection.returnId} />
   else if (selection.kind === 'master') body = <MasterPanel />
   else if (selection.kind === 'lane') body = <LanePanel trackId={selection.trackId} param={selection.param} />
+  else if (selection.kind === 'videoScene') body = <VideoScenePanel sceneId={selection.sceneId} />
+  else if (selection.kind === 'videoText') body = <VideoTextPanel textId={selection.textId} />
+  else if (videoView) body = <VideoBoardPanel />
   else body = <ProjectPanel />
   return (
     <aside className={`inspector${overlay ? ' is-overlay' : ''}`} aria-label="Inspector" data-region="inspector" tabIndex={-1}>

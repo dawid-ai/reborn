@@ -23,6 +23,7 @@ import { UpdateToast } from './components/UpdateToast'
 const Build = lazy(() => import('./components/Build').then((m) => ({ default: m.Build })))
 const Mix = lazy(() => import('./components/Mix').then((m) => ({ default: m.Mix })))
 const Perform = lazy(() => import('./components/Perform').then((m) => ({ default: m.Perform })))
+const Video = lazy(() => import('./components/Video').then((m) => ({ default: m.Video })))
 const AgentPanel = lazy(() => import('./components/AgentPanel').then((m) => ({ default: m.AgentPanel })))
 const Palette = lazy(() => import('./components/Palette').then((m) => ({ default: m.Palette })))
 const Help = lazy(() => import('./components/Help').then((m) => ({ default: m.Help })))
@@ -32,6 +33,7 @@ const VIEWS: { id: View; label: string }[] = [
   { id: 'build', label: 'Build' },
   { id: 'mix', label: 'Mix' },
   { id: 'perform', label: 'Perform' },
+  { id: 'video', label: 'Video' },
 ]
 
 function isTyping(target: EventTarget | null) {
@@ -345,7 +347,7 @@ export default function App() {
           return
         }
       }
-      const viewKey = (['arrange', 'build', 'mix', 'perform'] as View[]).find((v) => is(`view.${v}`))
+      const viewKey = (['arrange', 'build', 'mix', 'perform', 'video'] as View[]).find((v) => is(`view.${v}`))
       if (viewKey) return setView(viewKey)
       if (is('record')) {
         const recording = !s.recording
@@ -484,9 +486,10 @@ export default function App() {
             {view === 'build' && <Build />}
             {view === 'mix' && <Mix />}
             {view === 'perform' && <Perform />}
+            {view === 'video' && <Video />}
           </Suspense>
         </div>
-        {view !== 'perform' && <Dock />}
+        {view !== 'perform' && view !== 'video' && <Dock />}
       </main>
       {prefs.inspectorOpen && <Inspector overlay={!wide} onClose={() => setPrefs({ inspectorOpen: false })} />}
       {!wide && (prefs.browserOpen || prefs.inspectorOpen) && <div className="scrim" onClick={() => setPrefs({ browserOpen: false, inspectorOpen: false })} />}

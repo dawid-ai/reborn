@@ -21,6 +21,7 @@ const bridge: DesktopBridge = {
   packProject: (path) => ipcRenderer.invoke(IPC.packProject, path),
   cancelJob: (id) => ipcRenderer.invoke(IPC.cancelJob, id),
   saveWav: (data, name) => ipcRenderer.invoke(IPC.saveWav, data, name),
+  saveVideo: (data, name) => ipcRenderer.invoke(IPC.saveVideo, data, name),
   writeRecovery: (state) => ipcRenderer.send(IPC.writeRecovery, state),
   takeRecovery: () => ipcRenderer.invoke(IPC.takeRecovery),
   writeAutosave: (state) => ipcRenderer.invoke(IPC.writeAutosave, state),

@@ -56,3 +56,7 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.```
+
+## Mediabunny
+
+The app includes [Mediabunny](https://github.com/Vanilagy/mediabunny) by Vanilagy, unmodified, to write MP4 files from the **Video** view. It's licensed under the [Mozilla Public License 2.0](https://www.mozilla.org/MPL/2.0/); its source is available from its repository and from the `mediabunny` package on npm.

@@ -94,7 +94,7 @@ async function writeRenderedFiles(files: RenderedFile[], target?: string): Promi
 const log = (level: LogLevel, message: string) => void session?.log(level, message)
 
 // Test runs pass fixed paths instead of driving native dialogs.
-const presetPath = (name: 'OPEN' | 'SAVE' | 'WAV' | 'PACK') => process.env[`REBORN_E2E_${name}_PATH`]
+const presetPath = (name: 'OPEN' | 'SAVE' | 'WAV' | 'VIDEO' | 'PACK') => process.env[`REBORN_E2E_${name}_PATH`]
 
 function isTrusted(event: IpcMainEvent | IpcMainInvokeEvent): boolean {
   const url = event.senderFrame?.url ?? ''
@@ -236,6 +236,21 @@ async function saveWav(input: unknown, suggestedName: string): Promise<string | 
   if (!target) return null
   await writeAtomic(target, new Uint8Array(data))
   log('info', `Exported WAV to ${target} (${data.byteLength} bytes).`)
+  return target
+}
+
+async function saveVideo(input: unknown, suggestedName: string): Promise<string | null> {
+  const data = toArrayBuffer(input)
+  if (!data) throw new Error('Expected video data.')
+  const preset = presetPath('VIDEO')
+  const target = preset ?? (await dialog.showSaveDialog(mainWindow!, {
+    title: 'Export video',
+    defaultPath: join(app.getPath('videos'), basename(suggestedName || 'video.mp4')),
+    filters: [{ name: 'MP4 video', extensions: ['mp4'] }],
+  })).filePath
+  if (!target) return null
+  await writeAtomic(target, new Uint8Array(data))
+  log('info', `Exported video to ${target} (${data.byteLength} bytes).`)
   return target
 }
 
@@ -420,6 +435,7 @@ function registerIpc() {
   handle(IPC.packProject, (path: string) => packProject(String(path)))
   handle(IPC.cancelJob, async (id: string) => jobs.cancel(String(id)))
   handle(IPC.saveWav, (data: unknown, name: string) => saveWav(data, String(name ?? 'export.wav')))
+  handle(IPC.saveVideo, (data: unknown, name: string) => saveVideo(data, String(name ?? 'video.mp4')))
   handle(IPC.takeRecovery, () => session.takeRecovery())
   handle(IPC.writeAutosave, async (state: { studio?: studio.StudioProject; path?: unknown }) => {
     if (state?.studio && typeof state.studio.id === 'string') await session.writeAutosave(state.studio, typeof state.path === 'string' ? state.path : null)

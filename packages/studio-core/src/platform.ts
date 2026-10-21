@@ -200,6 +200,8 @@ export interface DesktopBridge {
   packProject(path: string): Promise<{ jobId: string } | null>
   cancelJob(id: string): Promise<void>
   saveWav(data: ArrayBuffer, suggestedName: string): Promise<string | null>
+  /** Asks where to save an exported MP4 and writes it. Null when cancelled. */
+  saveVideo(data: ArrayBuffer, suggestedName: string): Promise<string | null>
   writeRecovery(state: { project?: ProjectState; studio?: StudioProject; path: string | null }): void
   takeRecovery(): Promise<RecoveryState | null>
   /** Keeps the latest unsaved state of a project on disk. */
@@ -279,6 +281,7 @@ export const IPC = {
   cancelJob: 'job:cancel',
   jobUpdate: 'job:update',
   saveWav: 'wav:save',
+  saveVideo: 'video:save',
   writeRecovery: 'recovery:write',
   takeRecovery: 'recovery:take',
   writeAutosave: 'autosave:write',

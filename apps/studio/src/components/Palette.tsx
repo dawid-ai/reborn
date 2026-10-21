@@ -23,7 +23,7 @@ interface Action {
 function actions(): Action[] {
   const s = getState()
   const list: Action[] = [
-    ...(['arrange', 'build', 'mix', 'perform'] as View[]).map((view, i) => ({ id: `view-${view}`, label: `Go to ${view[0].toUpperCase()}${view.slice(1)}`, hint: String(i + 1), run: () => setView(view) })),
+    ...(['arrange', 'build', 'mix', 'perform', 'video'] as View[]).map((view, i) => ({ id: `view-${view}`, label: `Go to ${view[0].toUpperCase()}${view.slice(1)}`, hint: String(i + 1), run: () => setView(view) })),
     { id: 'play', label: s.transport.playing ? 'Pause' : 'Play', hint: 'Space', run: () => void togglePlay() },
     { id: 'stop', label: 'Stop and return to start', run: () => engine.stop() },
     { id: 'play-selection', label: 'Play from the selected clip or section', hint: 'Enter', run: playFromSelection },

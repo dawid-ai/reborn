@@ -56,6 +56,19 @@ describe('zip', () => {
 })
 
 describe('project directories', () => {
+  it('keeps video stills and footage in the video folder', async () => {
+    const directory = join(root, 'Video.reborn')
+    const still: DesktopAssetPayload = { id: 'vfl_still', kind: 'video', name: 'Drop.png', mimeType: 'image/png', data: bytes(137, 80) }
+    const clip: DesktopAssetPayload = { id: 'vfl_clip', kind: 'video', name: 'storm.mp4', mimeType: 'video/mp4', data: bytes(0, 0, 0, 24) }
+    await writeProjectDirectory(directory, createDefaultProject(), [asset('s1', bytes(1)), still, clip], 'test')
+    expect(existsSync(join(directory, 'video', 'vfl_still.png'))).toBe(true)
+    expect(existsSync(join(directory, 'video', 'vfl_clip.mp4'))).toBe(true)
+    const again = await writeProjectDirectory(directory, createDefaultProject(), [asset('s1', bytes(1)), still, clip], 'test')
+    expect(again).toMatchObject({ writtenAssets: 0, reusedAssets: 3 })
+    const opened = await readProjectPath(directory)
+    expect(opened.assets.map((a) => [a.id, a.kind]).sort()).toEqual([['s1', 'sample'], ['vfl_clip', 'video'], ['vfl_still', 'video']])
+  })
+
   it('saves, reopens, and skips rewriting unchanged audio', async () => {
     const project = createDefaultProject()
     project.name = 'DIR TEST'

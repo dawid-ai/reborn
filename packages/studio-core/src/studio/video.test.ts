@@ -145,10 +145,10 @@ describe('video commands', () => {
     expect(results[0]).toMatchObject({ functions: expect.arrayContaining(['smooth']), cutEvents: expect.arrayContaining(['kick']) })
   })
 
-  it('updates the brief, stage, fade, and impacts', () => {
+  it('updates the brief, fade, and impacts', () => {
     let project = execute(song(), { type: 'video.storyboard.create', params: {} }).project
-    project = execute(project, { type: 'video.storyboard.update', params: { stage: 'treatment', brief: { mood: 'dark' }, fade: 'min(1, t/6.4)', impacts: [{ sectionId: 'Drop 2', bars: 8 }], width: 1279 } }).project
-    expect(requireStoryboard(project)).toMatchObject({ stage: 'treatment', brief: { goal: '', mood: 'dark' }, fade: 'min(1, t/6.4)', impacts: [{ sectionId: 'sec_drop2', bars: 8 }], width: 1280 })
+    project = execute(project, { type: 'video.storyboard.update', params: { brief: { mood: 'dark', words: 'PSYCH DROP' }, fade: 'min(1, t/6.4)', impacts: [{ sectionId: 'Drop 2', bars: 8 }], width: 1279 } }).project
+    expect(requireStoryboard(project)).toMatchObject({ stage: 'brief', brief: { goal: '', mood: 'dark', words: 'PSYCH DROP' }, fade: 'min(1, t/6.4)', impacts: [{ sectionId: 'sec_drop2', bars: 8 }], width: 1280 })
   })
 
   it('reads storyboards with resolved times and flags scenes whose section is gone', () => {

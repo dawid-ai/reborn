@@ -127,6 +127,11 @@ async function collectAssets(project: StudioProject): Promise<DesktopAssetPayloa
     if (!stored) continue
     payloads.push({ id: asset.id, kind: 'sample', name: asset.name, mimeType: asset.mimeType, data: await stored.data.arrayBuffer() })
   }
+  for (const file of Object.values(project.video?.files ?? {})) {
+    const stored = await getAsset(file.id)
+    if (!stored) continue
+    payloads.push({ id: file.id, kind: 'video', name: file.name, mimeType: file.mimeType, data: await stored.data.arrayBuffer() })
+  }
   return payloads
 }
 
@@ -143,7 +148,7 @@ export async function saveProject(saveAs = false): Promise<boolean> {
     setState({ document: { path: result.path, savedRevision: project.revision } })
     // Saved to its folder, so the autosave is no longer needed.
     void desktop.deleteAutosave(project.id)
-    toast(result.writtenAssets ? `Saved · ${result.writtenAssets} audio file${result.writtenAssets === 1 ? '' : 's'} written` : 'Saved', 'success')
+    toast(result.writtenAssets ? `Saved · ${result.writtenAssets} file${result.writtenAssets === 1 ? '' : 's'} written` : 'Saved', 'success')
     return true
   } catch (error) {
     desktop.log('error', `Save failed: ${String(error)}`)

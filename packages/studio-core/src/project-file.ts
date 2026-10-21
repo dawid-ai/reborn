@@ -4,7 +4,8 @@ import { migrateStudioProject } from './studio/migrate'
 
 // On-disk project format shared by the web and desktop editions. A desktop
 // project is a `My Beat.reborn/` directory whose `project.json` holds a
-// `ProjectDocument`; audio lives beside it in `assets/`.
+// `ProjectDocument`; audio lives beside it in `assets/`, and the music
+// video's stills and footage in `video/`.
 
 export const PROJECT_FORMAT = 'reborn-project'
 /** Version 1 documents hold a v1 project; version 2 holds a v2 studio project. */
@@ -13,8 +14,10 @@ export const PROJECT_DIRECTORY_EXTENSION = '.reborn'
 export const PACKED_PROJECT_EXTENSION = '.rebornpack'
 export const PROJECT_FILE = 'project.json'
 export const ASSET_DIRECTORY = 'assets'
+export const VIDEO_DIRECTORY = 'video'
 
-export type ProjectAssetKind = 'deck' | 'sample'
+/** sample and deck are audio in `assets/`; video is a still or footage file in `video/`. */
+export type ProjectAssetKind = 'deck' | 'sample' | 'video'
 
 export interface ProjectAssetEntry {
   id: string
@@ -132,7 +135,7 @@ function isAssetEntry(value: unknown): value is ProjectAssetEntry {
   return (
     isRecord(value) &&
     typeof value.id === 'string' &&
-    (value.kind === 'deck' || value.kind === 'sample') &&
+    (value.kind === 'deck' || value.kind === 'sample' || value.kind === 'video') &&
     typeof value.file === 'string' &&
     !value.file.includes('..') &&
     typeof value.sha256 === 'string'
@@ -149,6 +152,12 @@ const EXTENSIONS: Record<string, string> = {
   'audio/aac': '.aac',
   'audio/mp4': '.m4a',
   'audio/webm': '.webm',
+  'image/png': '.png',
+  'image/jpeg': '.jpg',
+  'image/webp': '.webp',
+  'video/mp4': '.mp4',
+  'video/webm': '.webm',
+  'video/quicktime': '.mov',
 }
 
 /** Stable, filesystem-safe file name for an asset inside `assets/`. */
@@ -157,6 +166,11 @@ export function assetFileName(asset: { id: string; name: string; mimeType: strin
   const extension = fromName ?? EXTENSIONS[asset.mimeType.toLowerCase()] ?? '.bin'
   const safeId = asset.id.replace(/[^a-z0-9_-]+/gi, '-').slice(0, 80) || 'asset'
   return `${safeId}${extension}`
+}
+
+/** Path of an asset inside the project folder: audio in `assets/`, video files in `video/`. */
+export function assetPath(asset: { id: string; name: string; mimeType: string; kind: ProjectAssetKind }): string {
+  return `${asset.kind === 'video' ? VIDEO_DIRECTORY : ASSET_DIRECTORY}/${assetFileName(asset)}`
 }
 
 /** File-system-safe default name for a new project directory. */

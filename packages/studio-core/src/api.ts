@@ -52,6 +52,10 @@ export interface CommandInfo {
   type: string
   summary: string
   mutates: boolean
+  /** Music or video; older apps omit it, which means music. */
+  domain?: 'music' | 'video'
+  /** Only the user may run it; agent tools leave it out. */
+  userOnly?: boolean
   schema: Record<string, unknown>
 }
 

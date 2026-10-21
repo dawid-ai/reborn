@@ -12,7 +12,8 @@ import {
   type ProjectAssetEntry,
   type ProjectState,
   type studio,
-  assetFileName,
+  VIDEO_DIRECTORY,
+  assetPath,
   createProjectDocument,
   createStudioDocument,
   readProjectDocument,
@@ -49,17 +50,17 @@ export interface WriteResult {
 }
 
 /**
- * Saves a project directory. Audio files whose checksum already matches the
- * previous manifest are left untouched, so routine saves never rewrite large
- * samples. Files no longer referenced are kept; nothing in the folder is
- * deleted on save.
+ * Saves a project directory. Audio and video files whose checksum already
+ * matches the previous manifest are left untouched, so routine saves never
+ * rewrite large samples or footage. Files no longer referenced are kept;
+ * nothing in the folder is deleted on save.
  */
 export type ProjectContent = { project: ProjectState; studio?: undefined } | { studio: studio.StudioProject; project?: undefined }
 
 export async function writeProjectDirectory(directory: string, content: ProjectContent | ProjectState, assets: DesktopAssetPayload[], appVersion: string): Promise<WriteResult> {
   const payload: ProjectContent = 'version' in content && 'bass' in content ? { project: content as ProjectState } : (content as ProjectContent)
-  const assetDirectory = join(directory, ASSET_DIRECTORY)
-  await mkdir(assetDirectory, { recursive: true })
+  await mkdir(join(directory, ASSET_DIRECTORY), { recursive: true })
+  if (assets.some((asset) => asset.kind === 'video')) await mkdir(join(directory, VIDEO_DIRECTORY), { recursive: true })
   const previous = await readExistingManifest(directory)
   const entries: ProjectAssetEntry[] = []
   let writtenAssets = 0
@@ -67,7 +68,7 @@ export async function writeProjectDirectory(directory: string, content: ProjectC
   for (const asset of assets) {
     const bytes = new Uint8Array(asset.data)
     const checksum = sha256(bytes)
-    const file = `${ASSET_DIRECTORY}/${assetFileName(asset)}`
+    const file = assetPath(asset)
     const target = join(directory, file)
     const known = previous.get(asset.id)
     const unchanged = known?.sha256 === checksum && known.file === file && existsSync(target) && (await stat(target)).size === bytes.length

@@ -439,6 +439,8 @@ describe('every command', () => {
       // Video commands are exercised in video.test.ts.
       'video.reference', 'video.get', 'video.storyboard.create', 'video.storyboard.update', 'video.storyboard.activate', 'video.storyboard.duplicate', 'video.storyboard.remove',
       'video.scene.add', 'video.scene.update', 'video.scene.remove', 'video.text.add', 'video.text.update', 'video.text.remove',
+      'video.comment.add', 'video.comment.reply', 'video.comment.resolve', 'video.comment.remove', 'video.stage.request', 'video.stage.approve', 'video.stage.reopen',
+      'video.footage.add', 'video.footage.review', 'video.footage.update', 'video.footage.fetched', 'video.footage.remove', 'video.file.add', 'video.file.remove',
     ]
     expect([...COMMANDS.keys()].sort()).toEqual([...covered].sort())
   })

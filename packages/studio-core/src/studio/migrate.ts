@@ -1,5 +1,6 @@
 import { type StudioProject, STUDIO_SCHEMA, STUDIO_VERSION, defaultMaster, defaultReturns } from './model'
 import { StudioError } from './ops'
+import { normalizeVideo } from './video'
 
 // Pure, versioned migrations for v2 projects. Each step upgrades one
 // version; fixtures in migrate.test.ts pin the behavior.
@@ -38,5 +39,6 @@ export function migrateStudioProject(candidate: unknown): StudioProject {
     assets: project.assets ?? {},
     audit: project.audit ?? [],
     length: Math.max(1, project.length ?? 8),
+    ...(project.video !== undefined && { video: normalizeVideo(project.video) }),
   }
 }

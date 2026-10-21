@@ -85,7 +85,13 @@ export interface CommandSpec {
   mutates: boolean
   params: Record<string, FieldSpec>
   run: (project: StudioProject, params: Record<string, unknown>) => { project: StudioProject; result?: unknown }
+  /** Music commands edit the song; video commands edit storyboards. Agents get one domain each. */
+  domain?: CommandDomain
+  /** Decisions only the user makes, such as approving a stage; agents never get these. */
+  userOnly?: boolean
 }
+
+export type CommandDomain = 'music' | 'video'
 
 export interface Command {
   type: string
@@ -1162,6 +1168,9 @@ export function commandJsonSchema(spec: CommandSpec): Record<string, unknown> {
   }
 }
 
-export function listCommands(): { type: string; summary: string; mutates: boolean; schema: Record<string, unknown> }[] {
-  return ALL_SPECS.map((spec) => ({ type: spec.type, summary: spec.summary, mutates: spec.mutates, schema: commandJsonSchema(spec) }))
+export function listCommands(): { type: string; summary: string; mutates: boolean; domain: CommandDomain; userOnly: boolean; schema: Record<string, unknown> }[] {
+  return ALL_SPECS.map((spec) => ({ type: spec.type, summary: spec.summary, mutates: spec.mutates, domain: spec.domain ?? 'music', userOnly: spec.userOnly ?? false, schema: commandJsonSchema(spec) }))
 }
+
+/** The domain a command belongs to; unknown commands count as music. */
+export const commandDomain = (type: string): CommandDomain => COMMANDS.get(type)?.domain ?? 'music'

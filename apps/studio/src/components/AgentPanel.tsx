@@ -1,7 +1,7 @@
 import { KeyRound, MessageSquareX, Send, ShieldCheck, Sparkles, Square, X } from 'lucide-react'
 import { Fragment, useEffect, useRef, useState } from 'react'
 import type { AgentProvider } from '@reborn/studio-core'
-import { type AgentRole, ask, clearConversation, loadAgentSettings, setAgentRole, stopAgent, updateAgentSettings, useAgent } from '../agent/agent'
+import { type AgentRole, ask, clearConversation, isWorking, loadAgentSettings, setAgentRole, stopAgent, updateAgentSettings, useAgent } from '../agent/agent'
 import { type Inline, parseMarkdown } from '../agent/markdown'
 import { desktop } from '../platform/desktop'
 import { setState } from '../state/store'
@@ -117,9 +117,8 @@ function AgentText({ text }: { text: string }) {
 }
 
 /** "Working… 1:05" while the agent runs. */
-function Working() {
-  const startedAt = useAgent((s) => s.startedAt)
-  const working = useAgent((s) => s.working)
+function Working({ role }: { role: AgentRole }) {
+  const startedAt = useAgent((s) => s.startedAt[role])
   const [now, setNow] = useState(() => Date.now())
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 1000)
@@ -128,7 +127,7 @@ function Working() {
   const seconds = startedAt ? Math.max(0, Math.floor((now - startedAt) / 1000)) : 0
   return (
     <p className="agent thinking">
-      <span>{working === 'director' ? 'Director' : 'Composer'}</span>Working… {Math.floor(seconds / 60)}:{String(seconds % 60).padStart(2, '0')}
+      <span>{role === 'director' ? 'Director' : 'Composer'}</span>Working… {Math.floor(seconds / 60)}:{String(seconds % 60).padStart(2, '0')}
     </p>
   )
 }
@@ -147,8 +146,9 @@ const INTROS: Record<AgentRole, { text: string; examples: string[] }> = {
 export function AgentPanel() {
   const role = useAgent((s) => s.role)
   const lines = useAgent((s) => s.conversations[s.role])
-  const busy = useAgent((s) => s.busy)
-  const working = useAgent((s) => s.working)
+  const busy = useAgent((s) => isWorking(s, s.role))
+  const composerWorking = useAgent((s) => isWorking(s, 'composer'))
+  const directorWorking = useAgent((s) => isWorking(s, 'director'))
   const [draft, setDraft] = useState('')
   const [showSettings, setShowSettings] = useState(false)
   const log = useRef<HTMLDivElement>(null)
@@ -166,7 +166,7 @@ export function AgentPanel() {
           {(['composer', 'director'] as const).map((r) => (
             <button key={r} type="button" role="radio" aria-checked={role === r} className={role === r ? 'is-on' : ''} onClick={() => setAgentRole(r)}>
               {r === 'composer' ? 'Composer' : 'Director'}
-              {working === r && ' ●'}
+              {(r === 'composer' ? composerWorking : directorWorking) && ' ●'}
             </button>
           ))}
         </div>
@@ -207,7 +207,7 @@ export function AgentPanel() {
             </p>
           ),
         )}
-        {busy && <Working />}
+        {busy && <Working role={role} />}
       </div>
       <form
         className="agent-input"

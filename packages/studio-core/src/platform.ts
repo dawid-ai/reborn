@@ -251,8 +251,14 @@ export interface DesktopBridge {
   footageSearch(request: FootageSearchRequest): Promise<FootageSearchResult>
   /** Downloads an approved clip from a footage provider, within a byte limit. */
   footageDownload(request: { url: string; maxBytes: number }): Promise<{ data: ArrayBuffer; mimeType: string }>
-  /** Asks where to save an exported MP4 and writes it, plus any text files beside it. Null when cancelled. */
-  saveVideo(data: ArrayBuffer, suggestedName: string, extras?: { name: string; text: string }[]): Promise<string | null>
+  /** Asks where to save an exported MP4 and opens it for streaming. Null when cancelled. */
+  videoExportBegin(suggestedName: string): Promise<{ id: string; path: string } | null>
+  /** Writes encoded bytes at a file position. */
+  videoExportWrite(id: string, position: number, data: Uint8Array): Promise<void>
+  /** Completes the file and writes text files (description, credits) beside it. Returns the path. */
+  videoExportFinish(id: string, extras?: { name: string; text: string }[]): Promise<string>
+  /** Deletes an unfinished export. */
+  videoExportAbort(id: string): Promise<void>
   writeRecovery(state: { project?: ProjectState; studio?: StudioProject; path: string | null }): void
   takeRecovery(): Promise<RecoveryState | null>
   /** Keeps the latest unsaved state of a project on disk. */
@@ -273,7 +279,8 @@ export interface DesktopBridge {
   /** What the Claude CLI is doing while `agentRunCli` runs: each tool call and each note it writes. */
   onAgentActivity(listener: (activity: AgentActivity) => void): () => void
   /** Stops a running `agentRunCli`; it rejects with "Stopped." */
-  agentCancel(): void
+  /** Stops one agent's run, or every run without a role. */
+  agentCancel(role?: 'composer' | 'director'): void
   onApiRequest(listener: (request: ApiRpcRequest) => void): () => void
   respondApi(response: ApiRpcResponse): void
   /** Publishes a local-API event (project revision, proposal status) to connected clients. */
@@ -321,7 +328,10 @@ export type UpdateEvent =
   | { type: 'error'; message: string }
 
 /** One step of a Claude CLI run, streamed to the agent panel. */
-export type AgentActivity = { kind: 'tool'; name: string; input: Record<string, unknown> } | { kind: 'text'; text: string }
+export type AgentActivity = ({ kind: 'tool'; name: string; input: Record<string, unknown> } | { kind: 'text'; text: string }) & {
+  /** Which agent's run it comes from. */
+  role?: 'composer' | 'director'
+}
 
 /** IPC channel names. Kept in one place so main and preload cannot drift. */
 export const IPC = {
@@ -332,7 +342,10 @@ export const IPC = {
   cancelJob: 'job:cancel',
   jobUpdate: 'job:update',
   saveWav: 'wav:save',
-  saveVideo: 'video:save',
+  videoExportBegin: 'video-export:begin',
+  videoExportWrite: 'video-export:write',
+  videoExportFinish: 'video-export:finish',
+  videoExportAbort: 'video-export:abort',
   libraryList: 'library:list',
   librarySave: 'library:save',
   libraryRemove: 'library:remove',

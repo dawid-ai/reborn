@@ -1,5 +1,5 @@
 import { registerAacEncoder } from '@mediabunny/aac-encoder'
-import { AudioBufferSource, BufferTarget, CanvasSource, Mp4OutputFormat, Output, Quality, canEncodeAudio, getFirstEncodableAudioCodec, getFirstEncodableVideoCodec } from 'mediabunny'
+import { AudioBufferSource, BufferTarget, CanvasSource, Mp4OutputFormat, Output, Quality, StreamTarget, canEncodeAudio, getFirstEncodableAudioCodec, getFirstEncodableVideoCodec } from 'mediabunny'
 import { studio } from '@reborn/studio-core'
 import { Timeline, VideoRenderer, chapters, footageCredits } from '@reborn/video'
 import { desktop } from '../platform/desktop'
@@ -54,11 +54,48 @@ function download(blob: Blob, name: string) {
   setTimeout(() => URL.revokeObjectURL(url), 10_000)
 }
 
-async function save(data: ArrayBuffer, name: string, extras: Extra[]): Promise<string | null> {
-  if (desktop) return desktop.saveVideo(data, name, extras)
-  download(new Blob([data], { type: 'video/mp4' }), name)
-  for (const extra of extras) download(new Blob([extra.text], { type: 'text/plain' }), extra.name)
-  return name
+/**
+ * Where the MP4 goes. The desktop app streams it to the chosen file as it
+ * encodes, so length and resolution are limited by disk, not memory; the
+ * browser edition builds it in memory and downloads it at the end.
+ */
+interface Sink {
+  target: StreamTarget | BufferTarget
+  /** Moves the file into place (or downloads it). Returns where it went. */
+  finish(extras: Extra[]): Promise<{ path: string; bytes: number }>
+  abort(): Promise<void>
+}
+
+async function openSink(name: string): Promise<Sink | null> {
+  const bridge = desktop
+  if (bridge) {
+    const file = await bridge.videoExportBegin(name)
+    if (!file) return null
+    let bytes = 0
+    const writable = new WritableStream<{ type: 'write'; data: Uint8Array<ArrayBuffer>; position: number }>({
+      write: async (chunk) => {
+        bytes = Math.max(bytes, chunk.position + chunk.data.byteLength)
+        await bridge.videoExportWrite(file.id, chunk.position, chunk.data)
+      },
+    })
+    return {
+      target: new StreamTarget(writable, { chunked: true, chunkSize: 16 * 1024 * 1024 }),
+      finish: async (extras) => ({ path: await bridge.videoExportFinish(file.id, extras), bytes }),
+      abort: () => bridge.videoExportAbort(file.id),
+    }
+  }
+  const target = new BufferTarget()
+  return {
+    target,
+    finish: async (extras) => {
+      const data = target.buffer
+      if (!data) throw new Error('The encoder produced no data.')
+      download(new Blob([data], { type: 'video/mp4' }), name)
+      for (const extra of extras) download(new Blob([extra.text], { type: 'text/plain' }), extra.name)
+      return { path: name, bytes: data.byteLength }
+    },
+    abort: async () => undefined,
+  }
 }
 
 /** The publishing kit: a description with chapters and the footage credits. */
@@ -105,6 +142,7 @@ export async function exportVideo(options: VideoExportOptions): Promise<VideoExp
   const id = `video-export-${Date.now()}`
   const label = options.scale < 1 ? 'Rendering video draft' : 'Rendering video'
   const cancel = () => controller.abort()
+  let sink: Sink | null = null
   try {
     const analysis = await analyzeSong()
     if (!analysis) return null
@@ -135,7 +173,14 @@ export async function exportVideo(options: VideoExportOptions): Promise<VideoExp
     renderer.setTimeline(timeline)
     renderer.setFootage(footage)
 
-    const output = new Output({ format: new Mp4OutputFormat({ fastStart: 'in-memory' }), target: new BufferTarget() })
+    const base = `${slug(project.name)}-${slug(board.name)}${options.scale < 1 ? '-draft' : ''}${fullSong ? '' : `-${Math.round(from)}s`}`
+    sink = await openSink(`${base}.mp4`)
+    if (!sink) {
+      upsertJob({ id, label, completed: 0, total: 1, status: 'cancelled' })
+      return { path: null, bytes: 0, width, height, seconds: 0, codec: videoCodec }
+    }
+    // In memory the header can go first; streamed, it's written at the end and the file patched.
+    const output = new Output({ format: new Mp4OutputFormat({ fastStart: sink.target instanceof BufferTarget ? 'in-memory' : false }), target: sink.target })
     const video = new CanvasSource(canvas, { codec: videoCodec, quality: videoQuality, keyFrameInterval: 2 })
     const audio = new AudioBufferSource({ codec: audioCodec, quality: audioQuality })
     output.addVideoTrack(video, { frameRate: fps })
@@ -180,16 +225,15 @@ export async function exportVideo(options: VideoExportOptions): Promise<VideoExp
     await addAudioUntil(Infinity)
     await output.finalize()
     renderer.dispose()
-    const data = (output.target as BufferTarget).buffer
-    if (!data) throw new Error('The encoder produced no data.')
-    const base = `${slug(project.name)}-${slug(board.name)}${options.scale < 1 ? '-draft' : ''}${fullSong ? '' : `-${Math.round(from)}s`}`
     const kit = publishingText(project, board, fullSong)
-    const target = await save(data, `${base}.mp4`, options.scale < 1 ? [] : [{ name: `${base}-description.txt`, text: kit }])
+    const saved = await sink.finish(options.scale < 1 ? [] : [{ name: `${base}-description.txt`, text: kit }])
+    sink = null
     upsertJob({ id, label, completed: total, total, status: 'done' })
     const shareAlike = board.footage.some((clip) => clip.licence === 'cc-by-sa' && board.scenes.some((scene) => scene.clips.includes(clip.id)))
-    if (target) toast(`Exported ${width}×${height} ${videoCodec.toUpperCase()} video (${(data.byteLength / 1e6).toFixed(0)} MB).${shareAlike ? ' It uses CC BY-SA footage, which may require releasing the video under the same licence.' : ''}`, shareAlike ? 'info' : 'success')
-    return { path: target, bytes: data.byteLength, width, height, seconds: total / fps, codec: videoCodec }
+    toast(`Exported ${width}×${height} ${videoCodec.toUpperCase()} video (${(saved.bytes / 1e6).toFixed(0)} MB).${shareAlike ? ' It uses CC BY-SA footage, which may require releasing the video under the same licence.' : ''}`, shareAlike ? 'info' : 'success')
+    return { path: saved.path, bytes: saved.bytes, width, height, seconds: total / fps, codec: videoCodec }
   } catch (error) {
+    await sink?.abort().catch(() => undefined)
     const cancelled = controller.signal.aborted
     upsertJob({ id, label, completed: 0, total: 1, status: cancelled ? 'cancelled' : 'failed', message: String(error) })
     toast(cancelled ? 'Video export cancelled' : `Video export failed: ${error instanceof Error ? error.message : String(error)}`, cancelled ? 'info' : 'error')

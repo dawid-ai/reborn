@@ -30,6 +30,7 @@ import { ApiServer, type RenderedFile } from './api-server'
 import { FootageService } from './footage'
 import { JobRunner } from './jobs'
 import { LibraryStore } from './library'
+import { VideoWriters } from './video-file'
 import { isExternalLink } from './links'
 import { packProjectDirectory, readProjectPath, unpackProject, writeAtomic, writeProjectDirectory } from './project-dir'
 import { SessionStore } from './session'
@@ -65,6 +66,7 @@ let deep: DeepAnalysis
 let updates: Updater
 let library: LibraryStore
 let footageService: FootageService
+const videoWriters = new VideoWriters()
 const pendingRpc = new Map<string, { resolve: (reply: { status: number; body: unknown }) => void; timer: ReturnType<typeof setTimeout> }>()
 
 function rendererRpc(route: 'status' | 'execute' | 'runtime', body: unknown, timeoutMs = 30_000): Promise<{ status: number; body: unknown }> {
@@ -244,9 +246,7 @@ async function saveWav(input: unknown, suggestedName: string): Promise<string | 
   return target
 }
 
-async function saveVideo(input: unknown, suggestedName: string, extras: unknown): Promise<string | null> {
-  const data = toArrayBuffer(input)
-  if (!data) throw new Error('Expected video data.')
+async function beginVideoExport(suggestedName: string): Promise<{ id: string; path: string } | null> {
   const preset = presetPath('VIDEO')
   const target = preset ?? (await dialog.showSaveDialog(mainWindow!, {
     title: 'Export video',
@@ -254,15 +254,7 @@ async function saveVideo(input: unknown, suggestedName: string, extras: unknown)
     filters: [{ name: 'MP4 video', extensions: ['mp4'] }],
   })).filePath
   if (!target) return null
-  await writeAtomic(target, new Uint8Array(data))
-  // Text files (the description and credits) go beside the video, by base name only.
-  for (const extra of Array.isArray(extras) ? extras.slice(0, 4) : []) {
-    const name = typeof extra?.name === 'string' ? basename(extra.name) : ''
-    if (!/\.txt$/i.test(name) || typeof extra.text !== 'string') continue
-    await writeAtomic(join(dirname(target), name), extra.text.slice(0, 200_000))
-  }
-  log('info', `Exported video to ${target} (${data.byteLength} bytes).`)
-  return target
+  return { id: await videoWriters.begin(target), path: target }
 }
 
 async function buildMenu() {
@@ -375,11 +367,12 @@ function registerIpc() {
     // The Director works through stages with renders, so it gets longer.
     return agent.runCli(String(prompt), { command: process.execPath, args: [CLI_BUNDLE, 'mcp', '--role', director ? 'director' : 'composer'], env: { ELECTRON_RUN_AS_NODE: '1', REBORN_API_FILE: api.file } }, app.getPath('temp'), {
       timeoutMs: director ? 60 * 60_000 : undefined,
-      onActivity: (activity) => mainWindow?.webContents.send(IPC.agentActivity, activity),
+      role: director ? 'director' : 'composer',
+      onActivity: (activity) => mainWindow?.webContents.send(IPC.agentActivity, { ...activity, role: director ? 'director' : 'composer' }),
     })
   })
-  ipcMain.on(IPC.agentCancel, (event) => {
-    if (isTrusted(event)) agent.cancelCli()
+  ipcMain.on(IPC.agentCancel, (event, role: unknown) => {
+    if (isTrusted(event)) agent.cancelCli(role === 'director' || role === 'composer' ? role : undefined)
   })
   handle(IPC.apiClients, async () => api?.clientCount() ?? 0)
   const bytes = (data: unknown) => {
@@ -449,7 +442,18 @@ function registerIpc() {
   handle(IPC.packProject, (path: string) => packProject(String(path)))
   handle(IPC.cancelJob, async (id: string) => jobs.cancel(String(id)))
   handle(IPC.saveWav, (data: unknown, name: string) => saveWav(data, String(name ?? 'export.wav')))
-  handle(IPC.saveVideo, (data: unknown, name: string, extras: unknown) => saveVideo(data, String(name ?? 'video.mp4'), extras))
+  handle(IPC.videoExportBegin, (name: string) => beginVideoExport(String(name ?? 'video.mp4')))
+  handle(IPC.videoExportWrite, async (id: string, position: number, data: unknown) => {
+    const bytes = toArrayBuffer(data)
+    if (!bytes) throw new Error('Expected video data.')
+    await videoWriters.write(String(id), Number(position), new Uint8Array(bytes))
+  })
+  handle(IPC.videoExportFinish, async (id: string, extras: unknown) => {
+    const path = await videoWriters.finish(String(id), Array.isArray(extras) ? extras : [])
+    log('info', `Exported video to ${path}.`)
+    return path
+  })
+  handle(IPC.videoExportAbort, (id: string) => videoWriters.abort(String(id)))
   handle(IPC.libraryList, () => library.list())
   handle(IPC.librarySave, (item: studio.LibraryItem, data: unknown) => library.save(item, data === undefined || data === null ? null : toArrayBuffer(data)))
   handle(IPC.libraryRemove, (id: string) => library.remove(String(id)))
@@ -599,6 +603,7 @@ if (!app.requestSingleInstanceLock()) {
   })
 
   app.on('window-all-closed', () => app.quit())
+  app.on('will-quit', () => void videoWriters.abortAll())
 
   app.on('will-quit', (event) => {
     if (finishing) return

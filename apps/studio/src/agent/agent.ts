@@ -27,16 +27,16 @@ interface AgentState {
   /** The agent the panel shows and new requests go to. */
   role: AgentRole
   conversations: Record<AgentRole, ChatLine[]>
-  busy: boolean
-  /** The agent that is working, while busy. */
-  working: AgentRole | null
-  /** When the running request started, for the elapsed time. */
-  startedAt: number | null
+  /** When each agent's running request started, or null while it is idle. Both can work at once. */
+  startedAt: Record<AgentRole, number | null>
   settings: AgentSettings | null
 }
 
-let state: AgentState = { role: 'composer', conversations: { composer: [], director: [] }, busy: false, working: null, startedAt: null, settings: null }
-let stopRequested = false
+let state: AgentState = { role: 'composer', conversations: { composer: [], director: [] }, startedAt: { composer: null, director: null }, settings: null }
+const stopRequested: Record<AgentRole, boolean> = { composer: false, director: false }
+
+/** Whether an agent is working on a request. */
+export const isWorking = (s: AgentState, role: AgentRole) => s.startedAt[role] !== null
 const listeners = new Set<() => void>()
 const set = (patch: Partial<AgentState>) => {
   state = { ...state, ...patch }
@@ -244,17 +244,18 @@ async function runTool(name: string, input: Record<string, unknown>, settings: A
   }
 }
 
-/** Stops the running request: the Claude CLI at once, the in-app agent after its current step. */
+/** Stops the shown agent's request: the Claude CLI at once, the in-app agent after its current step. */
 export function stopAgent(): void {
-  if (!state.busy || stopRequested || !state.working) return
-  stopRequested = true
-  sayTo(state.working, { role: 'tool', text: 'Stopping…' })
-  desktop?.agentCancel()
+  const role = state.role
+  if (!isWorking(state, role) || stopRequested[role]) return
+  stopRequested[role] = true
+  sayTo(role, { role: 'tool', text: 'Stopping…' })
+  desktop?.agentCancel(role)
 }
 
 /** Starts a new conversation with the shown agent. It forgets earlier turns; the project is unchanged. */
 export function clearConversation(): void {
-  if (state.busy) return
+  if (isWorking(state, state.role)) return
   set({ conversations: { ...state.conversations, [state.role]: [] } })
 }
 
@@ -272,8 +273,8 @@ const DIRECTOR_TOOLS: AgentToolSpec[] = studio.DIRECTOR_TOOLS.map((t) => ({ ...t
 
 export async function ask(prompt: string): Promise<void> {
   const text = prompt.trim()
-  if (!text || state.busy) return
   const role = state.role
+  if (!text || isWorking(state, role)) return
   const say = (line: ChatLine) => sayTo(role, line)
   say({ role: 'user', text })
   if (!desktop) {
@@ -282,8 +283,8 @@ export async function ask(prompt: string): Promise<void> {
   }
   const settings = state.settings ?? (await loadAgentSettings())
   if (!settings) return
-  stopRequested = false
-  set({ busy: true, working: role, startedAt: Date.now() })
+  stopRequested[role] = false
+  set({ startedAt: { ...state.startedAt, [role]: Date.now() } })
   try {
     if (settings.provider === 'claude-cli') {
       if (!settings.cliAvailable) throw new Error('The claude command was not found. Install Claude Code, or pick another provider.')
@@ -291,6 +292,7 @@ export async function ask(prompt: string): Promise<void> {
       // The CLI streams each tool call and note while it works.
       let lastNote = ''
       const off = desktop.onAgentActivity((activity) => {
+        if ((activity.role ?? 'composer') !== role) return
         if (activity.kind === 'tool') say({ role: 'tool', text: describeStep(activity.name, activity.input) })
         else say({ role: 'agent', text: (lastNote = activity.text) })
       })
@@ -309,7 +311,7 @@ export async function ask(prompt: string): Promise<void> {
     }
     const messages: AgentMessage[] = [...historyAsMessages(role), { role: 'user', content: [{ type: 'text', text }] }]
     const rounds = role === 'director' ? 40 : 20
-    for (let round = 0; round < rounds && !stopRequested; round += 1) {
+    for (let round = 0; round < rounds && !stopRequested[role]; round += 1) {
       const response =
         role === 'director'
           ? await desktop.agentComplete({ system: `${studio.DIRECTOR_PROMPT}\n\n${directorContext()}`, messages, tools: DIRECTOR_TOOLS, maxTokens: 8192 })
@@ -318,23 +320,23 @@ export async function ask(prompt: string): Promise<void> {
       const texts = response.content.filter((c): c is Extract<AgentContent, { type: 'text' }> => c.type === 'text').map((c) => c.text.trim()).filter(Boolean)
       if (texts.length) say({ role: 'agent', text: texts.join('\n\n') })
       const calls = response.content.filter((c): c is Extract<AgentContent, { type: 'tool_use' }> => c.type === 'tool_use')
-      if (!calls.length || stopRequested) break
+      if (!calls.length || stopRequested[role]) break
       const results: AgentContent[] = []
       for (const call of calls) {
         say({ role: 'tool', text: describeStep(call.name, call.input) })
-        const outcome: ToolOutcome = stopRequested ? { content: 'The user stopped the agent.', isError: true } : role === 'director' ? await runDirectorTool(call.name, call.input) : await runTool(call.name, call.input, settings)
-        if (outcome.isError && !stopRequested) say({ role: 'tool', text: `That failed: ${String(outcome.content).slice(0, 200)}` })
+        const outcome: ToolOutcome = stopRequested[role] ? { content: 'The user stopped the agent.', isError: true } : role === 'director' ? await runDirectorTool(call.name, call.input) : await runTool(call.name, call.input, settings)
+        if (outcome.isError && !stopRequested[role]) say({ role: 'tool', text: `That failed: ${String(outcome.content).slice(0, 200)}` })
         results.push({ type: 'tool_result', tool_use_id: call.id, content: outcome.content, is_error: outcome.isError })
       }
       messages.push({ role: 'user', content: results })
     }
-    if (stopRequested) say({ role: 'agent', text: 'Stopped.' })
+    if (stopRequested[role]) say({ role: 'agent', text: 'Stopped.' })
   } catch (error) {
     const message = error instanceof Error ? error.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '') : String(error)
-    say({ role: 'agent', text: stopRequested || message === 'Stopped.' ? 'Stopped.' : `Something went wrong: ${message}` })
+    say({ role: 'agent', text: stopRequested[role] || message === 'Stopped.' ? 'Stopped.' : `Something went wrong: ${message}` })
   } finally {
-    stopRequested = false
-    set({ busy: false, working: null, startedAt: null })
+    stopRequested[role] = false
+    set({ startedAt: { ...state.startedAt, [role]: null } })
   }
 }
 

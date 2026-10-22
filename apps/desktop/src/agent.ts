@@ -29,8 +29,9 @@ export class AgentService {
   private readonly settingsFile: string
   private readonly keyFile: string
   private cliPath: string | null | undefined
-  private cliChild: ChildProcess | null = null
-  private cliStopped = false
+  /** One Claude CLI run per agent role, so the Composer and the Director can work at the same time. */
+  private readonly cliChildren = new Map<string, ChildProcess>()
+  private readonly cliStopped = new Set<string>()
 
   constructor(
     private readonly directory: string,
@@ -93,18 +94,19 @@ export class AgentService {
    * events goes to `onActivity` as it arrives, so the panel can show each
    * step; the final answer is the result event's text.
    */
-  async runCli(prompt: string, mcp: { command: string; args: string[]; env: Record<string, string> }, tempDir: string, options: { timeoutMs?: number; onActivity?: (activity: AgentActivity) => void } = {}): Promise<{ text: string }> {
+  async runCli(prompt: string, mcp: { command: string; args: string[]; env: Record<string, string> }, tempDir: string, options: { timeoutMs?: number; onActivity?: (activity: AgentActivity) => void; role?: string } = {}): Promise<{ text: string }> {
+    const role = options.role ?? 'composer'
     const cli = this.findCli()
     if (!cli) throw new Error('The claude command was not found. Install Claude Code or choose another provider.')
-    if (this.cliChild) throw new Error('The agent is already working. Stop it first.')
+    if (this.cliChildren.has(role)) throw new Error('This agent is already working. Stop it first.')
     // An empty working folder and no built-in tools: the CLI reaches only
     // RE:BORN, through its MCP server, and never other files or MCP servers.
-    const workDir = join(tempDir, 'reborn-agent')
+    const workDir = join(tempDir, `reborn-agent-${role}`)
     await mkdir(workDir, { recursive: true })
     const timeoutMs = options.timeoutMs ?? 20 * 60_000
-    const configFile = join(tempDir, `reborn-mcp-${process.pid}.json`)
+    const configFile = join(tempDir, `reborn-mcp-${process.pid}-${role}.json`)
     await writeFile(configFile, JSON.stringify({ mcpServers: { reborn: mcp } }))
-    this.cliStopped = false
+    this.cliStopped.delete(role)
     // By default the CLI loads only RE:BORN's MCP server. With otherMcp on it
     // also loads the user's own servers and may call them without asking,
     // which -p mode needs; built-in tools stay off either way.
@@ -113,12 +115,12 @@ export class AgentService {
     try {
       const output = await new Promise<string>((resolve, reject) => {
         const child = spawn(cli, ['-p', prompt, '--output-format', 'stream-json', '--verbose', '--tools', '', '--mcp-config', configFile, ...access], { cwd: workDir, shell: process.platform === 'win32' && /\.(cmd|bat)$/i.test(cli), windowsHide: true })
-        this.cliChild = child
+        this.cliChildren.set(role, child)
         let stdout = ''
         let pending = ''
         let stderr = ''
         const timer = setTimeout(() => {
-          this.cancelCli()
+          this.cancelCli(role)
           reject(new Error(`The Claude CLI did not finish within ${Math.round(timeoutMs / 60_000)} minutes.`))
         }, timeoutMs)
         child.stdout?.setEncoding('utf8')
@@ -139,23 +141,28 @@ export class AgentService {
         })
         child.on('close', (code) => {
           clearTimeout(timer)
-          if (this.cliStopped) reject(new Error('Stopped.'))
+          if (this.cliStopped.has(role)) reject(new Error('Stopped.'))
           else if (code === 0) resolve(stdout)
           else reject(new Error(`The Claude CLI exited with code ${code}: ${stderr.slice(0, 400)}`))
         })
       })
       return { text: parseCliOutput(streamToJson(output)) }
     } finally {
-      this.cliChild = null
+      this.cliChildren.delete(role)
       await rm(configFile, { force: true })
     }
   }
 
   /** Stops a running Claude CLI and the processes it started. */
-  cancelCli(): void {
-    const child = this.cliChild
+  /** Stops one role's CLI run, or every run when no role is given. */
+  cancelCli(role?: string): void {
+    if (role === undefined) {
+      for (const key of [...this.cliChildren.keys()]) this.cancelCli(key)
+      return
+    }
+    const child = this.cliChildren.get(role)
     if (!child?.pid) return
-    this.cliStopped = true
+    this.cliStopped.add(role)
     if (process.platform === 'win32') spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], { windowsHide: true }).on('error', () => child.kill())
     else child.kill()
   }

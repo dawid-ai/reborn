@@ -2,6 +2,17 @@
 
 Releases of the RE:BORN desktop app, newest first. The release workflow publishes each entry as the GitHub release notes, and the app shows them when it offers the update.
 
+## v2.2.1 — 2026-10-22
+
+- Fixed: a long request from the Director pushed the video preview, the **Looks, library, footage** drawer, the approve button, and the export buttons off the screen.
+- The Director's request now shows under the stage steps with its full text (**Read all**), the stills to check, and an **Approve** button named after the stage.
+- A line next to the stage steps says what the current stage is for, and **Go back…** reopens an earlier stage.
+- **Vertical copy** no longer stacks "vertical" onto copy names, a vertical storyboard offers **Landscape copy**, and **Delete storyboard** at the bottom of the inspector removes one.
+- The footage API keys and **Search footage** are also in the storyboard's **Footage** settings.
+- Contact sheets are now called stills overviews; click one in the inspector to see it large.
+- Footage scenes with no clips say so instead of showing black without explanation.
+- Text has an **RGB split** setting; 0 turns off the color split that follows the kick.
+
 ## v2.2.0 — 2026-10-22
 
 - **New:** the **Video** view (5) makes a music video for your song. Scenes start from your sections, cuts land on the drum hits your patterns play, and the preview follows playback. Export an MP4 with the mix as its audio, plus a description with chapters.

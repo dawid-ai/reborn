@@ -7,11 +7,11 @@ import { type CSSProperties, type MouseEvent, useEffect, useMemo, useRef, useSta
 import { studio } from '@reborn/studio-core'
 import { type Timeline as TimelineType, Timeline, VideoRenderer, lookById } from '@reborn/video'
 import { engine, usePlayhead } from '../audio/host'
-import { type Selection, dispatch, select, useStudio } from '../state/store'
+import { type Selection, dispatch, select, setState, toast, useStudio } from '../state/store'
 import { exportVideo, loadVideoFonts } from '../video/export'
 import { renderLookDev } from '../video/lookdev'
 import { footage } from '../video/media'
-import { type DrawerTab, VideoDrawer } from './VideoDrawer'
+import { VideoDrawer } from './VideoDrawer'
 import { StageBar, StillViewer, StoredImage } from './VideoReview'
 import { analyzeSong, isAnalysisCurrent, useAnalysis } from '../video/session'
 
@@ -67,7 +67,8 @@ function rangeSeconds(range: ExportRange, timeline: TimelineType, selection: Sel
   return undefined
 }
 
-function VideoBar({ board, timeline, drawer, onDrawer }: { board: studio.Storyboard; timeline: TimelineType; drawer: DrawerTab | null; onDrawer: (tab: DrawerTab | null) => void }) {
+function VideoBar({ board, timeline }: { board: studio.Storyboard; timeline: TimelineType }) {
+  const drawer = useStudio((s) => s.videoDrawer)
   const boards = useStudio((s) => s.project.video?.storyboards ?? [])
   const project = useStudio((s) => s.project)
   const selection = useStudio((s) => s.selection)
@@ -81,6 +82,18 @@ function VideoBar({ board, timeline, drawer, onDrawer }: { board: studio.Storybo
   const exportRange = rangeSeconds(range, timeline, selection)
   const size = studio.VIDEO_SIZES.find((s) => s.width === board.width && s.height === board.height)
   const update = (params: Record<string, unknown>, label: string) => dispatch({ type: 'video.storyboard.update', params: { storyboardId: board.id, ...params } }, { label })
+  // A portrait storyboard offers a landscape copy instead, and copies of
+  // copies keep one suffix rather than piling them up.
+  const portrait = board.height > board.width
+  const baseName = board.name.replace(/( (vertical|landscape)( \d+)?)+$/, '')
+  const copyAs = () => {
+    const suffix = portrait ? 'landscape' : 'vertical'
+    const taken = new Set(boards.map((b) => b.name))
+    let name = `${baseName} ${suffix}`
+    for (let n = 2; taken.has(name); n += 1) name = `${baseName} ${suffix} ${n}`
+    dispatch({ type: 'video.storyboard.duplicate', params: { storyboardId: board.id, name, ...(portrait ? { width: 1920, height: 1080 } : { width: 1080, height: 1920 }) } }, { label: portrait ? 'Duplicate as landscape' : 'Duplicate as vertical' })
+    toast(`Made “${name}” and switched to it. Pick a storyboard in the first menu to go back.`)
+  }
   return (
     <div className="video-bar">
       <select aria-label="Storyboard" value={board.id} onChange={(event) => dispatch({ type: 'video.storyboard.activate', params: { storyboardId: event.target.value } }, { label: 'Switch storyboard' })}>
@@ -112,10 +125,10 @@ function VideoBar({ board, timeline, drawer, onDrawer }: { board: studio.Storybo
           </option>
         ))}
       </select>
-      <button type="button" className="chip-btn" title="Copy this storyboard as a 1080×1920 vertical cut" onClick={() => dispatch({ type: 'video.storyboard.duplicate', params: { storyboardId: board.id, name: `${board.name} vertical`, width: 1080, height: 1920 } }, { label: 'Duplicate as vertical' })}>
-        Vertical copy
+      <button type="button" className="chip-btn" title={portrait ? 'Copy this storyboard as a 1920×1080 landscape cut and switch to it' : 'Copy this storyboard as a 1080×1920 vertical cut and switch to it'} onClick={copyAs}>
+        {portrait ? 'Landscape copy' : 'Vertical copy'}
       </button>
-      <button type="button" className={`chip-btn${drawer ? ' is-on' : ''}`} aria-pressed={Boolean(drawer)} onClick={() => onDrawer(drawer ? null : 'library')}>
+      <button type="button" className={`chip-btn${drawer ? ' is-on' : ''}`} aria-pressed={Boolean(drawer)} onClick={() => setState({ videoDrawer: drawer ? null : 'library' })}>
         <Library size={13} /> Looks, library, footage
       </button>
       <span className="video-bar-spacer" />
@@ -125,7 +138,7 @@ function VideoBar({ board, timeline, drawer, onDrawer }: { board: studio.Storybo
       <button type="button" className="chip-btn" disabled={analysis.running || current} onClick={() => void analyzeSong()}>
         <RefreshCw size={13} /> Analyze mix
       </button>
-      <button type="button" className="chip-btn" disabled={stilling} title="Render a still at each scene, impact, and text moment, plus a contact sheet" onClick={() => void renderLookDev({ storyboardId: board.id })}>
+      <button type="button" className="chip-btn" disabled={stilling} title="Render a still at each scene, impact, and text moment, plus an overview of them all" onClick={() => void renderLookDev({ storyboardId: board.id })}>
         <Camera size={13} /> Render stills
       </button>
       <select aria-label="Export range" value={range} onChange={(event) => setRange(event.target.value as ExportRange)}>
@@ -278,7 +291,7 @@ function Lanes({ board, timeline }: { board: studio.Storyboard; timeline: Timeli
   const project = useStudio((s) => s.project)
   const selection = useStudio((s) => s.selection)
   const files = useStudio((s) => s.project.video?.files)
-  const [viewing, setViewing] = useState<string | null>(null)
+  const view = (fileId: string) => setState({ videoStill: fileId })
   const barSeconds = timeline.cues.barSeconds
   const duration = timeline.duration
   const playhead = usePlayhead((bar) => Math.min(1, (bar * barSeconds) / duration))
@@ -386,7 +399,7 @@ function Lanes({ board, timeline }: { board: studio.Storyboard; timeline: Timeli
                 title={file.name}
                 onClick={(event) => {
                   event.stopPropagation()
-                  setViewing(id)
+                  view(id)
                 }}
               >
                 <StoredImage fileId={id} alt={file.name} />
@@ -410,7 +423,7 @@ function Lanes({ board, timeline }: { board: studio.Storyboard; timeline: Timeli
                   event.stopPropagation()
                   if (target.kind === 'scene') select({ kind: 'videoScene', sceneId: target.sceneId })
                   else if (target.kind === 'text') select({ kind: 'videoText', textId: target.textId })
-                  else if (target.kind === 'still') setViewing(target.fileId)
+                  else if (target.kind === 'still') view(target.fileId)
                   else select({ kind: 'none' })
                 }}
               >
@@ -424,7 +437,6 @@ function Lanes({ board, timeline }: { board: studio.Storyboard; timeline: Timeli
         </div>
         <span className="video-playhead" style={{ left: `${playhead * 100}%` }} />
       </div>
-      {viewing && <StillViewer board={board} fileId={viewing} onClose={() => setViewing(null)} />}
     </div>
   )
 }
@@ -436,17 +448,19 @@ export function Video() {
   // Video edits leave the analysis valid; music edits make it stale, and the
   // preview keeps the old envelopes until the mix is analyzed again.
   const timeline = useMemo(() => (board ? new Timeline(project, board, analysis.features) : null), [project, board, analysis.features])
-  const [drawer, setDrawer] = useState<DrawerTab | null>(null)
+  const drawer = useStudio((s) => s.videoDrawer)
+  const still = useStudio((s) => s.videoStill)
   if (!board || !timeline) return <EmptyVideo />
   return (
     <div className="video-view">
-      <VideoBar board={board} timeline={timeline} drawer={drawer} onDrawer={setDrawer} />
+      <VideoBar board={board} timeline={timeline} />
       <StageBar board={board} />
       <div className={`video-middle${drawer ? ' with-drawer' : ''}`}>
         <Preview board={board} timeline={timeline} />
-        {drawer && <VideoDrawer board={board} tab={drawer} onTab={setDrawer} onClose={() => setDrawer(null)} />}
+        {drawer && <VideoDrawer board={board} tab={drawer} onTab={(videoDrawer) => setState({ videoDrawer })} onClose={() => setState({ videoDrawer: null })} />}
       </div>
       <Lanes board={board} timeline={timeline} />
+      {still && <StillViewer board={board} fileId={still} onClose={() => setState({ videoStill: null })} />}
     </div>
   )
 }

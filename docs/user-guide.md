@@ -127,15 +127,17 @@ Every field takes a number or an expression evaluated each frame, for example `0
 Scenes and text are timed to section markers, so they follow along when you change the tempo or move a section. A scene whose section was deleted is marked in red.
 
 - **+** in the **Scenes** lane adds a scene at the playhead. Double-click a scene to jump to it.
-- **T** in the **Text** lane adds text at the playhead. Text styles include a slam on the drop, words that change on each kick or snare, a typewriter, a flicker on the hats, and a ticker.
-- **Vertical copy** duplicates the storyboard at 1080×1920 for Shorts, Reels, and TikTok.
+- **T** in the **Text** lane adds text at the playhead. Text styles include a slam on the drop, words that change on each kick or snare, a typewriter, a flicker on the hats, and a ticker. Text gets a color split that follows the kick; **RGB split** in the inspector scales it, and 0 turns it off.
+- **Vertical copy** duplicates the storyboard at 1080×1920 for Shorts, Reels, and TikTok and switches to the copy. On a vertical storyboard the button reads **Landscape copy**. The first menu in the bar switches storyboards, and **Delete storyboard** at the bottom of the inspector removes one.
 - Storyboards are saved in the project, undo like any other edit, and can be edited from the CLI and MCP with the `video.*` commands.
 
 ### Stages, comments, and approval
 
-A storyboard moves through five stages, shown above the preview: **Brief**, **Treatment**, **Look-dev**, **Draft**, and **Final**. Click **Start** after you fill in the brief in the inspector (what the video is for, mood, words to show, footage), and approve each later stage when you're happy with it. **Reopen** goes back to an earlier stage.
+A storyboard moves through five stages, shown above the preview: **Brief**, **Treatment**, **Look-dev**, **Draft**, and **Final**. The current stage is highlighted, and a line next to it says what the stage is for. Fill in the brief in the inspector (what the video is for, mood, words to show, footage), then click **Approve Brief**, and approve each later stage when you're happy with it. **Go back…** reopens an earlier stage.
 
-Leave comments on the storyboard, a scene, a text item, or a still at any time. Open comments block approval until they're answered; **Approve anyway** overrides that. **Render stills** renders a still at each scene, impact, and text moment plus a contact sheet. Click a still in the **Stills** lane to see it large and comment on it.
+When the Director asks for approval, its request appears under the stage steps: a summary (**Read all** shows the whole text), the stills it wants you to check, and the **Approve** button. To ask for changes instead, leave a comment, then tell the Director to continue.
+
+Leave comments on the storyboard, a scene, a text item, or a still at any time. Open comments block approval until they're answered; **Approve anyway** overrides that. **Render stills** renders a still at each scene, impact, and text moment, plus an overview: one image with all of them, listed under **Stills overview** in the inspector. Click a still in the **Stills** lane, or an overview, to see it large and comment on it.
 
 ### The Director
 
@@ -150,7 +152,7 @@ Switch the **Agent** panel to **Director** and describe the video you want. The 
 
 ### Footage
 
-Turn on **Use stock footage** in the storyboard settings to search Pexels, Pixabay, Wikimedia Commons, and the Internet Archive from the **Footage** tab. Pexels and Pixabay need a free API key, which RE:BORN keeps in the Windows credential store.
+Turn on **Use stock footage** in the storyboard settings to search Pexels, Pixabay, Wikimedia Commons, and the Internet Archive from the **Footage** tab. Pexels and Pixabay need a free API key: get one at [pexels.com/api](https://www.pexels.com/api/) and from the [Pixabay API documentation](https://pixabay.com/api/docs/) after you sign in, then paste it under **API keys** in the storyboard's **Footage** settings or the **Footage** tab. RE:BORN keeps the keys in the Windows credential store.
 
 - Only free-to-use licences (CC0, public domain, Pexels, Pixabay) are allowed unless you widen the policy. CC BY needs credits; CC BY-SA may require releasing the video under the same licence, and the export warns when a video uses it.
 - Keyword search is literal, so every clip waits for your review. Nothing downloads until you approve a clip, and downloads stay within the clip and megabyte limits in the brief.

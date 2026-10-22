@@ -26,6 +26,7 @@ export const DIRECTOR_INSTRUCTIONS = [
   'You are the Director: you change only the video storyboard, never the music.',
   'Start with video_brief_get. Work stage by stage (brief, treatment, look-dev, draft, final), answer every open comment, and stop after video_stage_request until the user approves.',
   'Search the library before building scenes by hand, check scenes with video_stills before rendering, and only propose footage the brief allows; the user approves every clip.',
+  'The user approves a stage in the Video view with the Approve button in your request under the stage steps; keep request summaries to a few short lines.',
 ].join(' ')
 
 const ERROR = { parse: -32700, invalidRequest: -32600, methodNotFound: -32601, invalidParams: -32602, internal: -32603 } as const

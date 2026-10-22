@@ -66,7 +66,7 @@ export function describeStep(name: string, input: Record<string, unknown> = {}):
       return `Editing the storyboard: ${text(input.intent) || 'changes'}${count ? ` (${count} edit${count === 1 ? '' : 's'})` : ''}`
     }
     case 'video_stills':
-      return Array.isArray(input.moments) ? `Rendering ${input.moments.length} stills` : 'Rendering stills and a contact sheet'
+      return Array.isArray(input.moments) ? `Rendering ${input.moments.length} stills` : 'Rendering stills and an overview'
     case 'video_render':
       return input.quality === 'final' ? 'Rendering the final video' : 'Rendering a draft video'
     case 'video_footage_search':

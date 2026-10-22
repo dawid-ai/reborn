@@ -82,7 +82,7 @@ export function drawText(ctx: Context2D, texts: readonly ResolvedText[], t: numb
     lines.forEach((line, i) => ctx.fillText(line, 0, (i - (lines.length - 1) / 2) * lineHeight))
     ctx.restore()
     frame.drawn = true
-    frame.ca = Math.max(frame.ca, 0.002 + 0.01 * scope.kick + (item.style === 'slam' ? 0.02 * Math.exp(-L * 10) : 0))
+    frame.ca = Math.max(frame.ca, item.split * (0.002 + 0.01 * scope.kick + (item.style === 'slam' ? 0.02 * Math.exp(-L * 10) : 0)))
     frame.glitch = Math.max(frame.glitch, item.glitch * Math.max(scope.snare, item.style === 'slam' ? Math.exp(-L * 8) : 0))
     if (item.blend === 'difference') frame.difference = 1
   }

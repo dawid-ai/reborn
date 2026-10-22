@@ -1,8 +1,8 @@
 import { Check, MessageSquare, X } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { type ReactNode, useEffect, useState } from 'react'
 import { studio } from '@reborn/studio-core'
 import { engine } from '../audio/host'
-import { dispatch, useStudio } from '../state/store'
+import { dispatch, setState, useStudio } from '../state/store'
 import { videoFileUrl } from '../video/media'
 
 // Review tools for the Video view: the stage bar with its approval gate,
@@ -26,59 +26,96 @@ export function StoredImage({ fileId, alt, className }: { fileId: string; alt: s
   return url ? <img src={url} alt={alt} className={className} draggable={false} /> : <span className={`${className ?? ''} is-loading`} aria-label={alt} />
 }
 
+/** What each stage is for, shown in the stage bar while nothing waits for approval. */
+const STAGE_HINTS: Record<studio.VideoStage, string> = {
+  brief: 'Describe the video in the brief in the inspector, then open Agent, switch to Director, and ask it to plan the video.',
+  treatment: 'The plan: a scene, look, and text for each section. Approve it when the plan fits the song.',
+  lookdev: 'Stills check framing, brightness, and color. Approve when the stills look right.',
+  draft: 'A draft export to watch in time with the music. Approve when the timing works.',
+  final: 'Export the finished MP4.',
+}
+
 export function StageBar({ board }: { board: studio.Storyboard }) {
   const open = studio.openComments(board).length
   const current = studio.VIDEO_STAGES.indexOf(board.stage)
   const finished = board.stage === 'final' && board.approvals.some((a) => a.stage === 'final')
+  const next = studio.nextStage(board.stage)
   const approve = (override: boolean) => dispatch({ type: 'video.stage.approve', params: { storyboardId: board.id, override } }, { label: `Approve ${STAGE_LABELS[board.stage]}` })
-  const label = board.stage === 'brief' ? 'Start' : `Approve ${STAGE_LABELS[board.stage]}`
+  const gate = finished ? null : (
+    <>
+      {open > 0 && (
+        <span className="video-open-comments">
+          <MessageSquare size={12} /> {open} open
+        </span>
+      )}
+      <button type="button" className="chip-btn primary" disabled={open > 0} title={open ? 'Answer the open comments first' : next ? `Moves the storyboard on to ${STAGE_LABELS[next]}` : 'Marks the video finished'} onClick={() => approve(false)}>
+        Approve {STAGE_LABELS[board.stage]}
+      </button>
+      {open > 0 && (
+        <button type="button" className="chip-btn" onClick={() => approve(true)}>
+          Approve anyway
+        </button>
+      )}
+    </>
+  )
   return (
     <div className="video-stages">
       <ol className="video-stage-steps" aria-label="Stages">
         {studio.VIDEO_STAGES.map((stage, i) => {
           const done = i < current || (finished && i === current)
           return (
-            <li key={stage} className={`${i === current && !finished ? 'is-current' : ''}${done ? ' is-done' : ''}`} aria-current={i === current ? 'step' : undefined}>
+            <li key={stage} className={`${i === current && !finished ? 'is-current' : ''}${done ? ' is-done' : ''}`} aria-current={i === current ? 'step' : undefined} title={STAGE_HINTS[stage]}>
               {done && <Check size={11} />}
               {STAGE_LABELS[stage]}
             </li>
           )
         })}
       </ol>
-      {board.request && (
-        <p className="video-request" role="status">
-          <b>Director:</b> {board.request.summary}
-        </p>
-      )}
-      <span className="video-bar-spacer" />
-      {open > 0 && (
-        <span className="video-open-comments">
-          <MessageSquare size={12} /> {open} open
-        </span>
-      )}
-      {!finished && (
-        <>
-          <button type="button" className="chip-btn primary" disabled={open > 0} title={open ? 'Answer the open comments first' : undefined} onClick={() => approve(false)}>
-            {label}
-          </button>
-          {open > 0 && (
-            <button type="button" className="chip-btn" onClick={() => approve(true)}>
-              Approve anyway
-            </button>
-          )}
-        </>
-      )}
+      <p className="video-stage-hint muted small">{finished ? 'Finished. Reopen a stage to keep working on it.' : board.request ? 'The Director is waiting for you.' : STAGE_HINTS[board.stage]}</p>
+      {!board.request && gate}
       {current > 0 && (
-        <select aria-label="Reopen a stage" value="" onChange={(event) => event.target.value && dispatch({ type: 'video.stage.reopen', params: { storyboardId: board.id, stage: event.target.value } }, { label: 'Reopen stage' })}>
-          <option value="">Reopen…</option>
+        <select aria-label="Reopen an earlier stage" value="" onChange={(event) => event.target.value && dispatch({ type: 'video.stage.reopen', params: { storyboardId: board.id, stage: event.target.value } }, { label: 'Reopen stage' })}>
+          <option value="">Go back…</option>
           {studio.VIDEO_STAGES.slice(0, current + (finished ? 1 : 0)).map((stage) => (
             <option key={stage} value={stage}>
-              {STAGE_LABELS[stage]}
+              Reopen {STAGE_LABELS[stage]}
             </option>
           ))}
         </select>
       )}
+      {board.request && <RequestCard request={board.request}>{gate}</RequestCard>}
     </div>
+  )
+}
+
+/** The Director's approval request: its summary, the stills to look at, and the approve button. */
+function RequestCard({ request, children }: { request: studio.StageRequest; children: ReactNode }) {
+  const [full, setFull] = useState(false)
+  const files = useStudio((s) => s.project.video?.files)
+  const at = new Date(request.at)
+  return (
+    <section className="video-request" aria-label="The Director's request">
+      <header>
+        <b>The Director asks you to approve {STAGE_LABELS[request.stage]}</b>
+        <span className="muted small">{at.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+      </header>
+      <p className={`video-request-text${full ? ' is-full' : ''}`}>{request.summary}</p>
+      <div className="video-request-foot">
+        <button type="button" className="chip-btn" aria-expanded={full} onClick={() => setFull(!full)}>
+          {full ? 'Show less' : 'Read all'}
+        </button>
+        {request.fileIds.map((id) => {
+          const file = files?.[id]
+          return file ? (
+            <button key={id} type="button" className="video-request-thumb" title={`Open ${file.name.replace(/\.png$/, '')}`} onClick={() => setState({ videoStill: id })}>
+              <StoredImage fileId={id} alt={file.name} />
+            </button>
+          ) : null
+        })}
+        <span className="video-request-tip muted small">To ask for changes, add a comment in the inspector, then tell the Director to continue.</span>
+        {children}
+      </div>
+    </section>
   )
 }
 
@@ -187,7 +224,7 @@ export function Comments({ board, target, title = 'Comments' }: { board: studio.
   )
 }
 
-/** A still or contact sheet, large, with its comments. */
+/** A still or overview, large, with its comments. */
 export function StillViewer({ board, fileId, onClose }: { board: studio.Storyboard; fileId: string; onClose: () => void }) {
   const file = useStudio((s) => s.project.video?.files[fileId])
   const barSeconds = useStudio((s) => studio.barSeconds(s.project))
@@ -196,7 +233,7 @@ export function StillViewer({ board, fileId, onClose }: { board: studio.Storyboa
     <div className="modal-backdrop" onPointerDown={onClose}>
       <div className="modal video-still-modal" role="dialog" aria-modal="true" aria-label={file.name} onPointerDown={(event) => event.stopPropagation()}>
         <header>
-          <h2>{file.kind === 'sheet' ? 'Contact sheet' : file.name.replace(/\.png$/, '')}</h2>
+          <h2>{file.name.replace(/\.png$/, '').replace(/^Contact sheet/, 'Overview')}</h2>
           <button type="button" className="icon-btn" aria-label="Close the still" onClick={onClose}>
             <X size={16} />
           </button>

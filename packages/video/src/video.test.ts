@@ -5,6 +5,7 @@ import { analyzeMix, featureAt, waveRows } from './features'
 import { LOOKS, lookById, parseLook } from './looks'
 import { buildSceneSource } from './renderer'
 import { chapters, footageCredits, keyMoments } from './stills'
+import { drawText } from './text'
 import { Timeline } from './timeline'
 
 function song(): studio.StudioProject {
@@ -108,6 +109,15 @@ describe('timeline', () => {
     expect(timeline.looks.map((l) => l.id)).toEqual(['julia-drift', 'strobe-deck'])
   })
 
+  it('warns when a footage scene has no clips', () => {
+    const project = song()
+    const next = studio.executeBatch(project, [
+      { type: 'video.storyboard.create', params: { empty: true } },
+      { type: 'video.scene.add', params: { start: { sectionId: 'Build' }, name: 'Smoke', look: 'footage-grade' } },
+    ]).project
+    expect(new Timeline(next, studio.requireStoryboard(next)).warnings).toContain('Scene "Smoke" uses footage but has no clips yet, so it shows black.')
+  })
+
   it('evaluates scene expressions with scene-relative time and riser progress', () => {
     const timeline = board(song())
     const build = timeline.scenes[0]
@@ -201,5 +211,20 @@ describe('look-dev helpers', () => {
     const project = song()
     project.sections = project.sections.map((s) => ({ ...s, start: s.start + 2 }))
     expect(chapters(project)).toBe('0:00 Intro\n0:03 Build\n0:09 Drop')
+  })
+})
+
+describe('text layer', () => {
+  // Enough of a 2D context to run the layout; nothing is drawn.
+  const ctx = { canvas: { width: 1920, height: 1080 }, clearRect() {}, save() {}, restore() {}, translate() {}, scale() {}, fillText() {} } as unknown as CanvasRenderingContext2D
+  const ref = studio.songStart(0)
+  const resolved = (split: number) => [{ item: studio.createText('DROP', ref, ref, { style: 'slam', split }), t0: 0, t1: 4, events: new Float64Array() }]
+
+  it('scales the RGB split with the split setting and turns it off at 0', () => {
+    const scope = { kick: 1, snare: 0, hat: 0 }
+    const normal = drawText(ctx, resolved(1), 0.5, scope, 0.4)
+    expect(normal.ca).toBeGreaterThan(0.01)
+    expect(drawText(ctx, resolved(2), 0.5, scope, 0.4).ca).toBeCloseTo(normal.ca * 2)
+    expect(drawText(ctx, resolved(0), 0.5, scope, 0.4)).toMatchObject({ drawn: true, ca: 0 })
   })
 })

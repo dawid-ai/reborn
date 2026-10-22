@@ -185,7 +185,7 @@ export interface AgentSettings {
   cliAvailable: boolean
 }
 
-/** Part of a tool result: text, or an image the model looks at (a still or contact sheet). */
+/** Part of a tool result: text, or an image the model looks at (a still or overview sheet). */
 export type AgentResultPart = { type: 'text'; text: string } | { type: 'image'; mediaType: 'image/png' | 'image/jpeg'; data: string }
 
 export type AgentContent =

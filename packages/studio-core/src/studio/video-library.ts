@@ -35,7 +35,9 @@ export interface ScenePreset {
 }
 
 /** A text item placed relative to the first section with a role. */
-export interface TemplateText extends Omit<VideoText, 'id' | 'start' | 'end'> {
+export interface TemplateText extends Omit<VideoText, 'id' | 'start' | 'end' | 'split'> {
+  /** Absent in templates saved before the setting existed; text gets the default. */
+  split?: number
   role: SectionRole
   /** Bars after the section start. */
   offset: number

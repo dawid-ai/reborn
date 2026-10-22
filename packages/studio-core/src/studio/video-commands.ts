@@ -251,7 +251,7 @@ function patchText(project: StudioProject, item: VideoText, p: P): VideoText {
   if (p.color !== undefined) next.color = checkColor(p.color, 'color')
   if (p.on !== undefined) next.on = checkCutOn(p.on, 'on')
   if (p.blend !== undefined) next.blend = p.blend as VideoText['blend']
-  for (const key of ['glitch', 'fadeIn', 'fadeOut', 'pulse', 'tracking'] as const) if (p[key] !== undefined) next[key] = Number(p[key])
+  for (const key of ['glitch', 'split', 'fadeIn', 'fadeOut', 'pulse', 'tracking'] as const) if (p[key] !== undefined) next[key] = Number(p[key])
   return next
 }
 
@@ -310,6 +310,7 @@ const TEXT_FIELDS: Record<string, FieldSpec> = {
   on: list('Events that advance the words style.', { type: 'string', description: 'Event.', enum: CUT_EVENTS }),
   blend: s('difference inverts whatever is under the text.', false, { enum: ['normal', 'difference'] }),
   glitch: n('Sideways slicing on snares, 0 to about 0.1.', false, { min: 0, max: 1 }),
+  split: n('Strength of the RGB split that follows the kick and the slam: 1 is the default, 0 turns it off.', false, { min: 0, max: 3 }),
   fadeIn: n('Seconds.', false, { min: 0, max: 30 }),
   fadeOut: n('Seconds.', false, { min: 0, max: 30 }),
   pulse: n('Growth on kicks, 0 to about 0.2.', false, { min: 0, max: 1 }),
@@ -679,7 +680,7 @@ const VIDEO_COMMANDS: CommandSpec[] = [
     type: 'video.stage.request',
     summary: 'Ask the user to approve the current stage, with a summary and the stills to look at. Stages listed in autoAdvance are approved at once when no comments are open.',
     mutates: true,
-    params: { storyboardId: BOARD, summary: s('What was done in this stage and what to look at.'), fileIds: list('Stills or contact sheets to review.', { type: 'string', description: 'File ID.' }) },
+    params: { storyboardId: BOARD, summary: s('What was done in this stage and what to look at.'), fileIds: list('Stills or overview sheets to review.', { type: 'string', description: 'File ID.' }) },
     run: (project, p) => {
       const board = requireStoryboard(project, opt(p, 'storyboardId'))
       const fileIds = ((p.fileIds as unknown[]) ?? []).map(String).filter((id) => board.stills.includes(id))
@@ -811,7 +812,7 @@ const VIDEO_COMMANDS: CommandSpec[] = [
   // Files -------------------------------------------------------------------------
   {
     type: 'video.file.add',
-    summary: 'Register a still or contact sheet the host has stored, and add it to the storyboard’s stills.',
+    summary: 'Register a still or overview sheet the host has stored, and add it to the storyboard’s stills.',
     mutates: true,
     params: { storyboardId: BOARD, file: o('The stored file record {id, kind, name, mimeType, bytes, width, height, seconds}.', true) },
     run: (project, p) => {
@@ -824,7 +825,7 @@ const VIDEO_COMMANDS: CommandSpec[] = [
   },
   {
     type: 'video.file.remove',
-    summary: 'Remove a still, contact sheet, or downloaded footage file from the project. Clips that used it go back to approved.',
+    summary: 'Remove a still, overview sheet, or downloaded footage file from the project. Clips that used it go back to approved.',
     mutates: true,
     params: { fileId: s('File ID.') },
     run: (project, p) => {

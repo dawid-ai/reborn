@@ -98,17 +98,30 @@ try {
   await page.waitForTimeout(500)
   await page.screenshot({ path: `${OUT}/video-text.png` })
 
-  // An open comment blocks the stage gate until it is answered.
+  // A long Director request wraps inside the view instead of widening it,
+  // and its card carries the approve button.
   await page.keyboard.press('Escape')
   const current = () => state(page, () => window.__studio.getState().project.video.storyboards[0])
+  await state(page, () => window.__studio.audit.store.dispatch({ type: 'video.stage.request', params: { summary: `Revised treatment.
+
+${'One long line of notes about every scene. '.repeat(90)}` } }))
+  await page.locator('.video-request').waitFor()
+  const viewWidth = await page.locator('.video-view').evaluate((el) => el.scrollWidth - el.clientWidth)
+  check(viewWidth <= 1, `a long request widens the Video view by ${viewWidth}px`)
+  check(await page.locator('.video-request').getByRole('button', { name: 'Approve Brief' }).isVisible(), 'the request card has no approve button')
+  await page.getByRole('button', { name: 'Read all' }).click()
+  await page.screenshot({ path: `${OUT}/video-request.png` })
+  await page.getByRole('button', { name: 'Show less' }).click()
+
+  // An open comment blocks the stage gate until it is answered.
   await page.getByPlaceholder(/A comment or request/).fill('Make the drop darker')
   await page.getByRole('button', { name: 'Add comment' }).click()
-  check(await page.getByRole('button', { name: 'Start', exact: true }).isDisabled(), 'Start is enabled with an open comment')
+  check(await page.getByRole('button', { name: 'Approve Brief', exact: true }).isDisabled(), 'Approve Brief is enabled with an open comment')
   await page.getByRole('button', { name: 'Done', exact: true }).first().click()
-  await page.getByRole('button', { name: 'Start', exact: true }).click()
+  await page.getByRole('button', { name: 'Approve Brief', exact: true }).click()
   check((await current()).stage === 'treatment', `the brief was not approved (${(await current()).stage})`)
 
-  // Look-dev stills and a contact sheet land on the storyboard.
+  // Look-dev stills and an overview sheet land on the storyboard.
   await page.getByRole('button', { name: 'Render stills' }).click()
   await page.waitForFunction(() => window.__studio.getState().project.video.storyboards[0].stills.length >= 3, null, { timeout: 60_000 })
   const files = await state(page, () => {
@@ -137,6 +150,23 @@ try {
   await page.getByText(/Footage search and downloads run in the desktop app/).waitFor()
   await page.screenshot({ path: `${OUT}/video-drawer.png` })
   await page.getByRole('button', { name: 'Close the drawer' }).click()
+
+  // Vertical copy switches to a 1080×1920 copy; the copy offers a landscape
+  // copy instead, and deleting it goes back to the original.
+  const original = (await current()).name
+  await page.getByRole('button', { name: 'Vertical copy' }).click()
+  const active = () => state(page, () => {
+    const video = window.__studio.getState().project.video
+    const board = video.storyboards.find((b) => b.id === video.activeId)
+    return { name: board.name, width: board.width, height: board.height, count: video.storyboards.length }
+  })
+  const vertical = await active()
+  check(vertical.name === `${original} vertical` && vertical.height === 1920 && vertical.count === 2, `the vertical copy is wrong (${JSON.stringify(vertical)})`)
+  check(await page.getByRole('button', { name: 'Landscape copy' }).isVisible(), 'a vertical storyboard still offers a vertical copy')
+  await page.keyboard.press('Escape')
+  await page.getByRole('button', { name: 'Delete storyboard' }).click()
+  const back = await active()
+  check(back.name === original && back.count === 1, `deleting the copy did not go back (${JSON.stringify(back)})`)
 
   // Mix analysis fills in the band envelopes.
   await page.getByRole('button', { name: 'Analyze mix' }).click()

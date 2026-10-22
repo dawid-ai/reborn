@@ -159,6 +159,7 @@ export class Timeline {
         return clip?.status === 'fetched' && clip.fileId ? [clip] : []
       })
       if (scene.clips.length && !clips.length) warn(`Scene "${scene.name || scene.look}" has no downloaded footage yet.`)
+      else if (!scene.clips.length && scene.look.startsWith('footage')) warn(`Scene "${scene.name || scene.look}" uses footage but has no clips yet, so it shows black.`)
       this.scenes.push({ scene, index, t0, t1, look, params: look ? resolveParams(look, scene.params, warn) : [], layers, post, cuts, clips })
     })
 

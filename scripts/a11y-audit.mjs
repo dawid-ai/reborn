@@ -19,6 +19,7 @@ const scenes = [
   ['perform', async () => page.keyboard.press('4')],
   ['video', async () => page.keyboard.press('5')],
   ['video storyboard', async () => { await page.getByRole('button', { name: 'Create storyboard' }).click(); await page.locator('.video-canvas').waitFor() }],
+  ['video request', async () => { await page.evaluate(() => window.__studio.audit.store.dispatch({ type: 'video.stage.request', params: { summary: 'Treatment ready: one scene per section.' } })); await page.locator('.video-request').waitFor() }],
   ['video scene selected', async () => page.locator('.video-block.scene').first().click()],
   ['video drawer', async () => { await page.getByRole('button', { name: 'Looks, library, footage' }).click(); await page.locator('.vlib-item').first().waitFor() }],
   ['help', async () => { await page.keyboard.press('1'); await page.keyboard.press('F1'); await page.locator('.modal.help').waitFor() }],

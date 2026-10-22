@@ -5,7 +5,7 @@ import { loadVideoFonts } from './export'
 import { footage, storeStill } from './media'
 import { getAnalysis, isAnalysisCurrent } from './session'
 
-// Look-dev: renders stills at the moments that matter and a contact sheet of
+// Look-dev: renders stills at the moments that matter and an overview sheet of
 // them, stored on the storyboard so the user (and the Director) can review
 // framing and brightness before any long render.
 
@@ -44,7 +44,7 @@ export async function renderLookDev(options: { storyboardId?: string; moments?: 
     }
     const sheet = await contactSheet(rendered, { title: `${project.name} · ${board.name} · ${board.stage}` })
     const sheetBitmap = await createImageBitmap(sheet)
-    const sheetId = await storeStill(sheet, { storyboardId: board.id, kind: 'sheet', name: `Contact sheet ${new Date().toISOString().slice(0, 16)}.png`, width: sheetBitmap.width, height: sheetBitmap.height, seconds: null }, { ...history, label: 'Add contact sheet' })
+    const sheetId = await storeStill(sheet, { storyboardId: board.id, kind: 'sheet', name: `Overview ${new Date().toISOString().slice(0, 16)}.png`, width: sheetBitmap.width, height: sheetBitmap.height, seconds: null }, { ...history, label: 'Add stills overview' })
     sheetBitmap.close()
     upsertJob({ id, label, completed: moments.length + 1, total: moments.length + 1, status: 'done' })
     return { stills, sheetId }

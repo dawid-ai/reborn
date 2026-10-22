@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import { type FootageCandidate, studio } from '@reborn/studio-core'
 import { LOOKS } from '@reborn/video'
 import { desktop } from '../platform/desktop'
-import { dispatch, toast, useStudio } from '../state/store'
+import { type VideoDrawerTab, dispatch, toast, useStudio } from '../state/store'
 import { addLibraryFootage, applyPreset, createFromTemplate, keepSuggestion, presetPreview, removeLibraryItem, saveFootage, savePreset, saveTemplate, useLibrary } from '../video/library'
 import { addCandidates, approveAndDownload, downloadClip, footageAvailable, footageBudgetOf, searchFootage } from '../video/stock'
 
@@ -11,7 +11,7 @@ import { addCandidates, approveAndDownload, downloadClip, footageAvailable, foot
 // templates, footage, and suggestions to keep), and stock footage search
 // with review. Footage downloads only after the user approves a clip.
 
-export type DrawerTab = 'looks' | 'library' | 'footage'
+export type DrawerTab = VideoDrawerTab
 
 const keep = (event: { stopPropagation: () => void }) => event.stopPropagation()
 
@@ -164,7 +164,8 @@ function LibraryTab({ board }: { board: studio.Storyboard }) {
   )
 }
 
-function FootageKeys() {
+/** Pexels and Pixabay API keys, kept in the system credential store. Desktop only. */
+export function FootageKeys() {
   const [status, setStatus] = useState<{ pexels: boolean; pixabay: boolean } | null>(null)
   const [keys, setKeys] = useState({ pexels: '', pixabay: '' })
   useEffect(() => {
@@ -176,7 +177,7 @@ function FootageKeys() {
     setKeys((k) => ({ ...k, [name]: '' }))
   }
   return (
-    <details className="vfoot-keys">
+    <details className="vfoot-keys" open={!status.pexels || !status.pixabay}>
       <summary>API keys {status.pexels && status.pixabay ? '' : `(${[!status.pexels && 'Pexels', !status.pixabay && 'Pixabay'].filter(Boolean).join(' and ')} need one)`}</summary>
       <p className="muted small">Pexels and Pixabay need a free API key. Keys are kept in your system's credential store. Wikimedia Commons and the Internet Archive need none.</p>
       {(['pexels', 'pixabay'] as const).map((name) => (

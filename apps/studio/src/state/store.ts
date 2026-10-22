@@ -117,7 +117,13 @@ export interface StudioState {
   midiInputs: string[] | null
   /** MIDI learn mode: the control picked on screen, waiting for a MIDI move. Null when off. */
   midiLearn: { target: MidiTarget | null } | null
+  /** The Video view's drawer tab, or null when the drawer is closed. */
+  videoDrawer: VideoDrawerTab | null
+  /** The still or overview open large in the Video view, by file ID. */
+  videoStill: string | null
 }
+
+export type VideoDrawerTab = 'looks' | 'library' | 'footage'
 
 export const DEFAULT_SHORTCUTS: Record<string, string> = {
   play: 'Space',
@@ -183,6 +189,8 @@ let state: StudioState = {
   recording: false,
   paletteOpen: false,
   agentOpen: false,
+  videoDrawer: null,
+  videoStill: null,
   recoverOpen: false,
   helpOpen: false,
   midiInputs: null,
@@ -259,7 +267,7 @@ export function dispatch(commands: Command | Command[], options: DispatchOptions
 
 /** Replaces the whole project (open, new, import). Clears history. */
 export function loadProject(project: StudioProject, document: DocumentState): void {
-  setState({ project, past: [], future: [], selection: { kind: 'none' }, document, proposals: [], previewProposal: null })
+  setState({ project, past: [], future: [], selection: { kind: 'none' }, document, proposals: [], previewProposal: null, videoStill: null })
 }
 
 export function undo(): void {

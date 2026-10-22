@@ -164,7 +164,7 @@ export async function runDirectorTool(name: string, input: Record<string, unknow
         const result = await renderLookDev({ moments, history })
         if (!result) return { content: 'Rendering stills failed.', isError: true }
         const sheet = result.sheetId ? await pngData(result.sheetId) : null
-        const text = json({ stills: result.stills, sheetId: result.sheetId, note: 'The contact sheet is attached. Pass sheetId or still fileIds to video_stage_request for the user to review.' })
+        const text = json({ stills: result.stills, sheetId: result.sheetId, note: 'The overview sheet of all stills is attached. Pass sheetId or still fileIds to video_stage_request for the user to review.' })
         return { content: sheet ? [{ type: 'text', text }, { type: 'image', mediaType: 'image/png', data: sheet }] : text }
       }
       case 'video_render': {

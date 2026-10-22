@@ -157,7 +157,7 @@ export async function startFakeServer(options: FakeServerOptions = {}): Promise<
         return { result: { name: 'Opened', path: params.path, revision: 0 } }
       case 'video.tool': {
         const name = String(params.name)
-        // Stills come back with an image, like the app's contact sheet.
+        // Stills come back with an image, like the app's overview sheet.
         return { jobId: startJob('video', { text: `ran ${name}`, ...(name === 'video_stills' && { image: { mediaType: 'image/png', data: 'iVBORw0KGgo=' } }) }) }
       }
       case 'proposal.list':

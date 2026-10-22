@@ -115,6 +115,8 @@ export interface VideoText {
   blend: 'normal' | 'difference'
   /** Slices the text sideways on snares, 0 to about 0.1. */
   glitch: number
+  /** Strength of the RGB split that follows the kick: 1 is the default, 0 turns it off. */
+  split: number
   fadeIn: number
   fadeOut: number
   /** Grows the text on kicks, 0 to about 0.2. */
@@ -201,7 +203,7 @@ export interface StageApproval {
 export interface StageRequest {
   stage: VideoStage
   summary: string
-  /** Stills or contact sheets to review. */
+  /** Stills or overview sheets to review. */
   fileIds: string[]
   at: string
 }
@@ -240,7 +242,7 @@ export interface FootageClip {
 export const VIDEO_FILE_KINDS = ['still', 'sheet', 'footage'] as const
 export type VideoFileKind = (typeof VIDEO_FILE_KINDS)[number]
 
-/** A binary file on the video side: a still, a contact sheet, or downloaded footage. Saved in the project's video folder. */
+/** A binary file on the video side: a still, an overview sheet, or downloaded footage. Saved in the project's video folder. */
 export interface VideoFile {
   id: string
   kind: VideoFileKind
@@ -278,7 +280,7 @@ export interface Storyboard {
   /** Stages the Director may approve itself. Empty by default, so every gate waits for the user. */
   autoAdvance: VideoStage[]
   footage: FootageClip[]
-  /** Still and contact sheet file IDs, oldest first. */
+  /** Still and overview sheet file IDs, oldest first. */
   stills: string[]
   /** The library template the storyboard started from. */
   template: LibraryRef | null
@@ -287,7 +289,7 @@ export interface Storyboard {
 export interface VideoState {
   storyboards: Storyboard[]
   activeId: string | null
-  /** Stills, contact sheets, and footage, shared by every storyboard in the project. */
+  /** Stills, overview sheets, and footage, shared by every storyboard in the project. */
   files: Record<string, VideoFile>
 }
 
@@ -333,6 +335,7 @@ export function createText(text: string, start: TimeRef, end: TimeRef, patch: Pa
     on: ['beat'],
     blend: 'normal',
     glitch: 0,
+    split: 1,
     fadeIn: 0,
     fadeOut: 0,
     pulse: 0,

@@ -2,8 +2,9 @@ import { Trash2 } from 'lucide-react'
 import { type CSSProperties, type ReactNode, useState } from 'react'
 import { studio } from '@reborn/studio-core'
 import { LOOKS, chapters, footageCredits, lookById } from '@reborn/video'
-import { type DispatchOptions, dispatch, select, toast, useStudio } from '../state/store'
+import { type DispatchOptions, dispatch, select, setState, toast, useStudio } from '../state/store'
 import { applyPreset, libraryItem, useLibrary } from '../video/library'
+import { FootageKeys } from './VideoDrawer'
 import { Comments, STAGE_LABELS, StoredImage } from './VideoReview'
 
 // Inspector panels for the Video view: the selected scene, the selected text
@@ -354,7 +355,16 @@ function SceneFootage({ scene }: { scene: studio.VideoScene }) {
   if (!usable.length && !footageLook) return null
   return (
     <Group title="Footage">
-      {!usable.length && <p className="muted small">No approved footage yet. Search for clips in the Footage panel below the preview.</p>}
+      {!usable.length && (
+        <>
+          <p className="muted small">No approved footage yet, so this scene shows black. Search for clips, approve the ones you want, and they download for the scene to use.</p>
+          <div className="insp-row">
+            <button type="button" className="chip-btn" onClick={() => setState({ videoDrawer: 'footage' })}>
+              Search footage
+            </button>
+          </div>
+        </>
+      )}
       <ul className="vclip-pick">
         {usable.map((clip) => {
           const on = scene.clips.includes(clip.id)
@@ -451,6 +461,7 @@ export function VideoTextPanel({ textId }: { textId: string }) {
             </select>
           </label>
           <NumberField label="Glitch" value={item.glitch} step={0.01} min={0} max={1} onCommit={(glitch) => edit({ glitch })} />
+          <NumberField label="RGB split" value={item.split} step={0.1} min={0} max={3} onCommit={(split) => edit({ split })} />
           <NumberField label="Kick pulse" value={item.pulse} step={0.02} min={0} max={1} onCommit={(pulse) => edit({ pulse })} />
           <NumberField label="Tracking" value={item.tracking} step={0.02} min={-0.5} max={2} onCommit={(tracking) => edit({ tracking })} />
           <NumberField label="Fade in (s)" value={item.fadeIn} min={0} max={30} onCommit={(fadeIn) => edit({ fadeIn })} />
@@ -536,11 +547,17 @@ export function VideoBoardPanel() {
               <NumberField label="Clip limit" value={board.brief.footage.maxClips} step={1} min={0} max={200} onCommit={(maxClips) => edit({ brief: { footage: { maxClips } } }, 'Change footage limit')} />
               <NumberField label="Download limit (MB)" value={board.brief.footage.maxMegabytes} step={50} min={0} max={20000} onCommit={(maxMegabytes) => edit({ brief: { footage: { maxMegabytes } } }, 'Change footage limit')} />
             </div>
+            <FootageKeys />
+            <div className="insp-row">
+              <button type="button" className="chip-btn" onClick={() => setState({ videoDrawer: 'footage' })}>
+                Search footage
+              </button>
+            </div>
           </>
         )}
       </Group>
       <Group title="Director">
-        <p className="muted small">The Director asks before moving past each stage. Tick a stage to let it move on without asking when no comments are open.</p>
+        <p className="muted small">The Director asks before moving past each stage, and you approve with the button under the stage steps above the preview. Tick a stage to let the Director move on without asking when no comments are open.</p>
         <Chips label="Stages the Director may approve" options={studio.VIDEO_STAGES.filter((s) => s !== 'brief')} value={board.autoAdvance} onChange={(autoAdvance) => edit({ autoAdvance }, 'Change auto-advance')} labels={STAGE_LABELS} />
       </Group>
       <Comments board={board} title="Comments and requests" />
@@ -556,6 +573,18 @@ export function VideoBoardPanel() {
         <p className="muted small">Clips with “impact” in their name fire the impact flash. Clips with “riser” in their name drive rise and rstrobe.</p>
       </Group>
       <ExpressionHelp />
+      <div className="insp-row">
+        <button
+          type="button"
+          className="chip-btn danger"
+          onClick={() => {
+            dispatch({ type: 'video.storyboard.remove', params: { storyboardId: board.id } }, { label: 'Delete storyboard' })
+            toast(`Deleted “${board.name}”. Undo brings it back.`)
+          }}
+        >
+          Delete storyboard
+        </button>
+      </div>
     </>
   )
 }
@@ -564,18 +593,19 @@ const BRIEF_LABELS = { goal: 'What the video is for', mood: 'Mood, colors, refer
 
 const PROVIDER_LABELS: Record<studio.FootageProvider, string> = { pexels: 'Pexels', pixabay: 'Pixabay', wikimedia: 'Wikimedia Commons', archive: 'Internet Archive' }
 
-/** Contact sheets for this storyboard, newest first. */
+/** Overview sheets for this storyboard, newest first: every still from one render on one image. */
 function StillsGroup({ board }: { board: studio.Storyboard }) {
   const files = useStudio((s) => s.project.video?.files ?? {})
   const sheets = board.stills.map((id) => files[id]).filter((f): f is studio.VideoFile => f?.kind === 'sheet').reverse()
   if (!sheets.length) return null
   return (
-    <Group title="Contact sheets">
+    <Group title="Stills overview">
+      <p className="muted small">Each render of stills also makes one image of them all. Click one to see it large and comment on it.</p>
       {sheets.slice(0, 3).map((sheet) => (
-        <figure key={sheet.id} className="vsheet">
+        <button key={sheet.id} type="button" className="vsheet" onClick={() => setState({ videoStill: sheet.id })}>
           <StoredImage fileId={sheet.id} alt={sheet.name} />
-          <figcaption className="muted small">{sheet.name.replace(/\.png$/, '')}</figcaption>
-        </figure>
+          <span className="muted small">{sheet.name.replace(/\.png$/, '').replace(/^Contact sheet/, 'Overview')}</span>
+        </button>
       ))}
     </Group>
   )

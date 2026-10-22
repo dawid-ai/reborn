@@ -4,7 +4,7 @@ import { VideoRenderer } from './renderer'
 import type { Timeline } from './timeline'
 
 // Stills for look-dev: a frame at each moment that matters, rendered with
-// the same renderer as the preview and export, plus a contact sheet that
+// the same renderer as the preview and export, plus an overview sheet that
 // shows them side by side. A dozen stills take seconds, so problems such as
 // an off-center fractal or a washed-out drop show up before any long render.
 

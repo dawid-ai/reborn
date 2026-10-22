@@ -3,7 +3,7 @@ import { FootageDecoder } from '@reborn/video'
 import { getAsset, putAsset } from '../platform/assetStore'
 import { type DispatchOptions, dispatch } from '../state/store'
 
-// Video files (stills, contact sheets, footage) keep their bytes in the same
+// Video files (stills, overview sheets, footage) keep their bytes in the same
 // store as audio, so they reopen in the browser and are written into the
 // project's video folder when the desktop app saves.
 
@@ -23,12 +23,12 @@ export async function videoFileUrl(fileId: string): Promise<string | null> {
   return url
 }
 
-/** Stores a still or contact sheet and adds it to a storyboard. Returns the file ID. */
+/** Stores a still or overview sheet and adds it to a storyboard. Returns the file ID. */
 export async function storeStill(blob: Blob, meta: { storyboardId: string; kind: 'still' | 'sheet'; name: string; width: number; height: number; seconds: number | null }, history: DispatchOptions = {}): Promise<string | null> {
   const id = studio.newId('vfl')
   await putAsset({ id, name: meta.name, mimeType: blob.type || 'image/png', data: blob })
   const file = { id, kind: meta.kind, name: meta.name, mimeType: blob.type || 'image/png', bytes: blob.size, width: meta.width, height: meta.height, duration: 0, seconds: meta.seconds, createdAt: new Date().toISOString() }
-  const results = dispatch({ type: 'video.file.add', params: { storyboardId: meta.storyboardId, file } }, { label: meta.kind === 'sheet' ? 'Add contact sheet' : 'Add still', ...history })
+  const results = dispatch({ type: 'video.file.add', params: { storyboardId: meta.storyboardId, file } }, { label: meta.kind === 'sheet' ? 'Add stills overview' : 'Add still', ...history })
   return results ? id : null
 }
 

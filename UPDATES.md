@@ -2,6 +2,13 @@
 
 Releases of the RE:BORN desktop app, newest first. The release workflow publishes each entry as the GitHub release notes, and the app shows them when it offers the update.
 
+## v2.2.0 — 2026-10-22
+
+- **New:** the **Video** view (5) makes a music video for your song. Scenes start from your sections, cuts land on the drum hits your patterns play, and the preview follows playback. Export an MP4 with the mix as its audio, plus a description with chapters.
+- **New:** the **Director**, a second agent in the **Agent** panel. It plans and builds the video stage by stage, checks it with stills, answers your comments, and waits for your approval. It never changes the music. The **Composer** and the Director can work at the same time.
+- **New:** stages with approval, comments on scenes and stills, contact sheets, a library of looks, presets, and templates, and stock footage from Pexels, Pixabay, Wikimedia Commons, and the Internet Archive that downloads only after you approve each clip.
+- Projects from the earlier web edition still open; the app now uses only the RE:BORN name.
+
 ## v2.1.0 — 2026-10-21
 
 - **New:** **Clear conversation** at the top of the **Agent** panel starts a new conversation. The agent forgets the earlier messages; your project stays as it is.

@@ -12,8 +12,8 @@
     "cli:build": "vite build --config packages/cli/vite.config.ts",
     "studio": "vite --config apps/studio/vite.config.ts",
     "studio:build": "vite build --config apps/studio/vite.config.ts",
-    "dist": "npm run desktop:build && electron-builder --config electron-builder.yml --projectDir apps/desktop --win --publish never",
-    "release": "npm run desktop:build && electron-builder --config electron-builder.yml --projectDir apps/desktop --win --publish always",
+    "dist": "npm run desktop:build && electron-builder --config electron-builder.yml --projectDir apps/desktop --publish never",
+    "release": "npm run desktop:build && electron-builder --config electron-builder.yml --projectDir apps/desktop --publish always",
     "audit:a11y": "node scripts/a11y-audit.mjs",
     "audit:audio": "node scripts/audio-audit.mjs"
   },

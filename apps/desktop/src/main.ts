@@ -35,7 +35,7 @@ import { isExternalLink } from './links'
 import { packProjectDirectory, readProjectPath, unpackProject, writeAtomic, writeProjectDirectory } from './project-dir'
 import { SessionStore } from './session'
 import { createUpdater, type Updater } from './updater'
-import { installCliShim, shimDirectory } from './cli-shim'
+import { copyCliBundle, installCliShim, shimDirectory } from './cli-shim'
 
 const APP_ORIGIN = 'app://reborn'
 const DEV_URL = process.argv.includes('--dev') ? (process.env.REBORN_DEV_URL ?? 'http://127.0.0.1:5175') : undefined
@@ -44,6 +44,9 @@ const RENDERER_DIRECTORY = app.isPackaged ? join(process.resourcesPath, 'studio'
 const SIDECAR_DIR = app.isPackaged ? join(process.resourcesPath, 'python', 'ismail-bridge') : resolve(__dirname, '../../../python/ismail-bridge')
 const CLI_BUNDLE = app.isPackaged ? join(process.resourcesPath, 'cli', 'reborn.mjs') : resolve(__dirname, '../../../packages/cli/dist/reborn.mjs')
 const NOTICES = app.isPackaged ? join(process.resourcesPath, 'THIRD_PARTY_NOTICES.md') : resolve(__dirname, '../../../THIRD_PARTY_NOTICES.md')
+// Set when running from the Linux AppImage; see copyCliBundle.
+const APPIMAGE = app.isPackaged ? process.env.APPIMAGE : undefined
+const appImageCliDir = () => join(app.getPath('userData'), 'cli')
 const E2E = process.env.REBORN_E2E === '1'
 
 // The product name contains a colon, which Windows forbids in folder names,
@@ -330,7 +333,8 @@ async function buildMenu() {
           click: async () => {
             const { dir, onPath } = shimDirectory(process.env, join(app.getPath('userData'), 'bin'))
             try {
-              const target = await installCliShim(dir, process.execPath, CLI_BUNDLE)
+              const bundle = APPIMAGE ? await copyCliBundle(CLI_BUNDLE, appImageCliDir()) : CLI_BUNDLE
+              const target = await installCliShim(dir, APPIMAGE ?? process.execPath, bundle)
               log('info', `Installed the reborn command at ${target}.`)
               await dialog.showMessageBox(mainWindow!, {
                 type: 'info',
@@ -588,6 +592,8 @@ if (!app.requestSingleInstanceLock()) {
     })
     if (E2E) Object.assign(globalThis, { __rebornDeep: deep })
     // Before the window: the startup check's result waits in updates.current().
+    // Keep an installed AppImage shim's CLI in step with this version.
+    if (APPIMAGE && existsSync(join(appImageCliDir(), 'reborn.mjs'))) await copyCliBundle(CLI_BUNDLE, appImageCliDir()).catch((error) => log('error', `Could not refresh the reborn command: ${String(error)}`))
     updates = createUpdater({ send: (event) => mainWindow?.webContents.send(IPC.updateEvent, event), log: (message) => log('info', message) })
     registerProtocol()
     registerIpc()

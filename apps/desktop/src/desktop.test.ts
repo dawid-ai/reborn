@@ -209,13 +209,31 @@ describe('reborn command shim', () => {
     const { installCliShim, shimDirectory } = await import('./cli-shim')
     const dir = await mkdtemp(join(tmpdir(), 'reborn-shim-'))
     try {
-      const target = await installCliShim(join(dir, 'bin'), 'C:\Apps\RE-BORN\RE-BORN.exe', 'C:\Apps\RE-BORN\resources\cli\reborn.mjs')
+      const target = await installCliShim(join(dir, 'bin'), 'C:\Apps\RE-BORN\RE-BORN.exe', 'C:\Apps\RE-BORN\resources\cli\reborn.mjs', 'win32')
+      expect(target).toBe(join(dir, 'bin', 'reborn.cmd'))
       const text = await readFile(target, 'utf8')
       expect(text).toContain('set ELECTRON_RUN_AS_NODE=1')
       expect(text).toContain('"C:\Apps\RE-BORN\RE-BORN.exe" "C:\Apps\RE-BORN\resources\cli\reborn.mjs" %*')
-      expect(shimDirectory({}, join(dir, 'fallback'))).toEqual({ dir: join(dir, 'fallback'), onPath: false })
+      expect(shimDirectory({}, join(dir, 'fallback'), 'win32')).toEqual({ dir: join(dir, 'fallback'), onPath: false })
       await mkdir(join(dir, 'Microsoft', 'WindowsApps'), { recursive: true })
-      expect(shimDirectory({ LOCALAPPDATA: dir }, 'x')).toEqual({ dir: join(dir, 'Microsoft', 'WindowsApps'), onPath: true })
+      expect(shimDirectory({ LOCALAPPDATA: dir }, 'x', 'win32')).toEqual({ dir: join(dir, 'Microsoft', 'WindowsApps'), onPath: true })
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('writes an executable shell script on Linux', async () => {
+    const { installCliShim, shimDirectory } = await import('./cli-shim')
+    const dir = await mkdtemp(join(tmpdir(), 'reborn-shim-'))
+    try {
+      const target = await installCliShim(join(dir, 'bin'), "/opt/RE-BORN's/RE-BORN.AppImage", '/home/me/.config/RE-BORN/cli/reborn.mjs', 'linux')
+      expect(target).toBe(join(dir, 'bin', 'reborn'))
+      const text = await readFile(target, 'utf8')
+      expect(text).toBe(`#!/bin/sh\nELECTRON_RUN_AS_NODE=1 exec '/opt/RE-BORN'\\''s/RE-BORN.AppImage' '/home/me/.config/RE-BORN/cli/reborn.mjs' --no-sandbox "$@"\n`)
+      if (process.platform !== 'win32') expect((await stat(target)).mode & 0o777).toBe(0o755)
+      expect(shimDirectory({}, 'fallback', 'linux')).toEqual({ dir: 'fallback', onPath: false })
+      expect(shimDirectory({ HOME: '/home/me', PATH: '/usr/bin' }, 'x', 'linux')).toEqual({ dir: join('/home/me', '.local', 'bin'), onPath: false })
+      expect(shimDirectory({ HOME: '/home/me', PATH: `/usr/bin:${join('/home/me', '.local', 'bin')}` }, 'x', 'linux').onPath).toBe(true)
     } finally {
       await rm(dir, { recursive: true, force: true })
     }

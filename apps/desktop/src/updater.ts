@@ -6,7 +6,8 @@ import { notesToText } from './update-notes'
 // Updates come from GitHub Releases (see electron-builder.yml). The app asks
 // before it downloads: autoDownload is off, the studio shows a prompt, and a
 // downloaded update installs on Restart now or the next quit. Only installed
-// builds check; development runs and end-to-end tests never do.
+// builds check; development runs and end-to-end tests never do. On Linux only
+// the AppImage can update itself, so other Linux builds don't check.
 
 export interface Updater {
   /** Looks for a newer release and reports every step, including errors. */
@@ -26,7 +27,7 @@ interface UpdaterOptions {
 }
 
 export function createUpdater({ send, log }: UpdaterOptions): Updater {
-  const enabled = app.isPackaged && process.env.REBORN_E2E !== '1' && process.env.REBORN_UPDATES !== 'off'
+  const enabled = app.isPackaged && process.env.REBORN_E2E !== '1' && process.env.REBORN_UPDATES !== 'off' && (process.platform !== 'linux' || Boolean(process.env.APPIMAGE))
   let last: UpdateEvent | null = null
   // The startup check stays quiet unless it finds an update; a check you ask
   // for reports checking, up to date, and errors too.

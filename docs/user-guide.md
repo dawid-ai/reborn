@@ -4,11 +4,19 @@ RE:BORN is a desktop music workstation for acid lines, drum machines, sampled be
 
 ## Install
 
+On Windows:
+
 1. Download [`RE-BORN-Setup.exe`](https://github.com/dawid-ai/reborn/releases/latest/download/RE-BORN-Setup.exe), the latest release. Older versions are on the [releases page](https://github.com/dawid-ai/reborn/releases).
 2. Run it. If Windows SmartScreen warns about an unsigned build, click **More info** > **Run anyway**.
 3. Start **RE-BORN** from the Start menu.
 
-Installed builds check GitHub Releases for updates on launch. When a newer version exists, a prompt shows its notes: click **Update now** to download it, then **Restart now** to install it, or **Later** to install it the next time you quit. To check now, click **Help** > **Check for Updates**.
+On Linux:
+
+1. Download [`RE-BORN-x86_64.AppImage`](https://github.com/dawid-ai/reborn/releases/latest/download/RE-BORN-x86_64.AppImage).
+2. Make it executable with `chmod +x RE-BORN-x86_64.AppImage`, then run it. If it says AppImages require FUSE, install FUSE 2: `sudo pacman -S fuse2` on Arch, `sudo apt install libfuse2t64` (or `libfuse2`) on Ubuntu.
+3. Keep the AppImage where it is: updates replace that file.
+
+Installed builds, and the AppImage on Linux, check GitHub Releases for updates on launch. When a newer version exists, a prompt shows its notes: click **Update now** to download it, then **Restart now** to install it, or **Later** to install it the next time you quit. To check now, click **Help** > **Check for Updates**.
 
 ## Make a first beat
 
@@ -97,7 +105,7 @@ Click **Agent** in the transport. The panel has two agents, each with its own co
 Choose a provider:
 
 - **Claude CLI** uses your Claude Code login.
-- **Claude API** uses an Anthropic API key, stored in the Windows credential store.
+- **Claude API** uses an Anthropic API key, stored in the OS credential store (Windows Credential Manager, or the Secret Service keyring such as GNOME Keyring or KWallet on Linux).
 - **Local or compatible** uses Ollama, LM Studio, or any OpenAI-compatible server.
 
 Agent edits arrive as proposals. Preview a proposal to hear it, then apply all of it, part of it, or none. To let the agent edit directly, turn on direct edits in the agent settings; each edit is still one undo step. Measurements are shared with the provider only when you turn that on.
@@ -152,7 +160,7 @@ Switch the **Agent** panel to **Director** and describe the video you want. The 
 
 ### Footage
 
-Turn on **Use stock footage** in the storyboard settings to search Pexels, Pixabay, Wikimedia Commons, and the Internet Archive from the **Footage** tab. Pexels and Pixabay need a free API key: get one at [pexels.com/api](https://www.pexels.com/api/) and from the [Pixabay API documentation](https://pixabay.com/api/docs/) after you sign in, then paste it under **API keys** in the storyboard's **Footage** settings or the **Footage** tab. RE:BORN keeps the keys in the Windows credential store.
+Turn on **Use stock footage** in the storyboard settings to search Pexels, Pixabay, Wikimedia Commons, and the Internet Archive from the **Footage** tab. Pexels and Pixabay need a free API key: get one at [pexels.com/api](https://www.pexels.com/api/) and from the [Pixabay API documentation](https://pixabay.com/api/docs/) after you sign in, then paste it under **API keys** in the storyboard's **Footage** settings or the **Footage** tab. RE:BORN keeps the keys in the OS credential store.
 
 - Only free-to-use licences (CC0, public domain, Pexels, Pixabay) are allowed unless you widen the policy. CC BY needs credits; CC BY-SA may require releasing the video under the same licence, and the export warns when a video uses it.
 - Keyword search is literal, so every clip waits for your review. Nothing downloads until you approve a clip, and downloads stay within the clip and megabyte limits in the brief.

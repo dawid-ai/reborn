@@ -13,13 +13,17 @@ permissions:
 
 jobs:
   desktop:
-    name: Build, unit tests, and desktop end-to-end
-    runs-on: windows-latest
+    name: Build, unit tests, and desktop end-to-end (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
         with:
-          node-version: '22'
+          node-version-file: .nvmrc
           cache: npm
       - uses: actions/setup-python@v6
         with:
@@ -31,13 +35,23 @@ jobs:
       - run: npm run build
       - run: npm test
       - run: python -m unittest discover -s python/ismail-bridge/tests
+      # Ubuntu's AppArmor blocks the user namespaces Electron's sandbox needs.
+      - name: Allow Electron's sandbox on Linux
+        if: runner.os == 'Linux'
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
       # Playback, save, export, pack, reopen, CLI and MCP editing, the update
-      # prompt, sidecar restarts, and crash recovery.
-      - run: node scripts/desktop-smoke.mjs
+      # prompt, sidecar restarts, and crash recovery. Linux has no screen, so
+      # it runs under a virtual X server.
+      - name: Desktop end-to-end
+        shell: bash
+        run: ${{ runner.os == 'Linux' && 'xvfb-run -a ' || '' }}node scripts/desktop-smoke.mjs
+      # Builds this platform's installer, so packaging breaks here rather than
+      # at release time.
+      - run: npm run dist
       - uses: actions/upload-artifact@v7
         if: failure()
         with:
-          name: desktop-smoke
+          name: desktop-smoke-${{ matrix.os }}
           path: artifacts/desktop-e2e
           retention-days: 14
 
@@ -48,7 +62,7 @@ jobs:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
         with:
-          node-version: '22'
+          node-version-file: .nvmrc
           cache: npm
       - run: npm ci
       - run: npx playwright install chromium

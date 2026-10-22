@@ -10,7 +10,13 @@ process.once('SIGINT', () => {
   setTimeout(() => process.exit(130), 500).unref()
 })
 
-runCli(process.argv.slice(2), {
+// The Linux AppImage shim passes --no-sandbox first so the AppImage launcher
+// doesn't put it before the script, where Node would reject it. See
+// apps/desktop/src/cli-shim.ts.
+const args = process.argv.slice(2)
+if (args[0] === '--no-sandbox') args.shift()
+
+runCli(args, {
   stdout: (text) => void process.stdout.write(text),
   stderr: (text) => void process.stderr.write(text),
   env: process.env,

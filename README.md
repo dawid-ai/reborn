@@ -3,13 +3,14 @@
 [![CI](https://github.com/dawid-ai/reborn/actions/workflows/ci.yml/badge.svg)](https://github.com/dawid-ai/reborn/actions/workflows/ci.yml)
 [![Latest release](https://img.shields.io/github/v/release/dawid-ai/reborn)](https://github.com/dawid-ai/reborn/releases/latest)
 
-A desktop music workstation for Windows. Write acid lines, program drum machines, chop breaks, arrange full songs, mix them, and perform them live. An agent can help through the app, the `reborn` CLI, or MCP.
+A desktop music workstation for Windows and Linux. Write acid lines, program drum machines, chop breaks, arrange full songs, mix them, and perform them live. An agent can help through the app, the `reborn` CLI, or MCP.
 
 ![The Arrange view with the ABYSSAL SIGNAL demo: tracks, sections, and an Acid line open in the piano roll](docs/images/arrange.png)
 
 ## Download
 
-[Download `RE-BORN-Setup.exe`](https://github.com/dawid-ai/reborn/releases/latest/download/RE-BORN-Setup.exe), the latest release for 64-bit Windows 10 and 11. The installer isn't code-signed yet, so Windows SmartScreen asks first: click **More info** > **Run anyway**.
+- **Windows:** [Download `RE-BORN-Setup.exe`](https://github.com/dawid-ai/reborn/releases/latest/download/RE-BORN-Setup.exe), the latest release for 64-bit Windows 10 and 11. The installer isn't code-signed yet, so Windows SmartScreen asks first: click **More info** > **Run anyway**.
+- **Linux:** [Download `RE-BORN-x86_64.AppImage`](https://github.com/dawid-ai/reborn/releases/latest/download/RE-BORN-x86_64.AppImage) for 64-bit Linux, make it executable with `chmod +x RE-BORN-x86_64.AppImage`, and run it. AppImages need FUSE 2: on Arch, install it with `sudo pacman -S fuse2`; on Ubuntu 22.04 and later, `sudo apt install libfuse2t64` (or `libfuse2`).
 
 The app checks for updates at launch and asks before it downloads one. See the [update notes](UPDATES.md) for what changed in each release, and the [releases page](https://github.com/dawid-ai/reborn/releases) for older versions.
 
@@ -35,7 +36,7 @@ The app checks for updates at launch and asks before it downloads one. See the [
 
 ## Run from source
 
-You need Node.js 22. Deep analysis and the sidecar tests also need Python 3.10 or later with `numpy`.
+You need Node.js 22 (the version in `.nvmrc`). Deep analysis and the sidecar tests also need Python 3.10 or later with `numpy`.
 
 ```bash
 npm ci
@@ -44,7 +45,7 @@ npm run desktop
 
 This builds and starts the desktop app. For UI work, run `npm run studio` and open `http://127.0.0.1:5175`.
 
-Run `npm run build` to type-check and build everything, and `npm test` for unit tests. `npm run dist` builds the installer into `release/`. CI runs the unit tests, the sidecar tests, the studio and desktop end-to-end tests, and the accessibility and audio audits on every push.
+Run `npm run build` to type-check and build everything, and `npm test` for unit tests. `npm run dist` builds the installer for the platform you're on into `release/`: `RE-BORN-Setup.exe` on Windows, `RE-BORN-x86_64.AppImage` on Linux. CI runs the unit tests, the sidecar tests, the desktop end-to-end tests, and the installer build on Windows and Linux, plus the studio end-to-end tests and the accessibility and audio audits, on every push. Pushing a `v*` tag publishes both installers to one GitHub release.
 
 ## Credits
 

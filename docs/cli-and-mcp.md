@@ -4,7 +4,7 @@ The desktop app runs a local API while it's open. The `reborn` command and the M
 
 ## Install the reborn command
 
-In the desktop app, click **Help** > **Install Command-Line Tool**. This writes `reborn.cmd` to `%LOCALAPPDATA%\Microsoft\WindowsApps`, which is on your `PATH` by default. Open a new terminal and run:
+In the desktop app, click **Help** > **Install Command-Line Tool**. On Windows this writes `reborn.cmd` to `%LOCALAPPDATA%\Microsoft\WindowsApps`, which is on your `PATH` by default. On Linux it writes `reborn` to `~/.local/bin`; if that folder isn't on your `PATH`, the app says so. With the AppImage, the command runs the AppImage itself, so keep it where it was when you installed the command. Open a new terminal and run:
 
 ```bash
 reborn status

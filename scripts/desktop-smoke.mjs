@@ -33,8 +33,12 @@ const until = async (predicate, message, timeout = 30_000) => {
   return false
 }
 
+// Linux CI runs under Xvfb with no GPU, and Chromium no longer falls back to
+// software WebGL on its own; the video renderer needs WebGL2.
+const GPU_ARGS = process.platform === 'linux' && process.env.CI ? ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] : []
+
 async function launch() {
-  const app = await electron.launch({ args: ['apps/desktop'], env })
+  const app = await electron.launch({ args: [...GPU_ARGS, 'apps/desktop'], env })
   const page = await app.firstWindow()
   const errors = []
   page.on('pageerror', (error) => errors.push(error.message))

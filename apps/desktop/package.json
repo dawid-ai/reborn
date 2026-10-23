@@ -1,6 +1,7 @@
 {
   "name": "@reborn/desktop",
   "productName": "RE:BORN",
+  "desktopName": "re-born.desktop",
   "version": "2.2.1",
   "private": true,
   "main": "dist/main.cjs",

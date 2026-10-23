@@ -1,7 +1,8 @@
 name: Release desktop
 
-# Push a tag such as v2.1.1 to check, build, and publish the Windows installer,
-# with the latest.yml update feed electron-updater reads, to GitHub Releases.
+# Push a tag such as v2.1.1 to check, build, and publish the Windows installer
+# and the Linux AppImage, with the latest.yml and latest-linux.yml update feeds
+# electron-updater reads, to GitHub Releases.
 # The checks are the CI workflow's. A manual run (workflow_dispatch) runs the
 # checks only and publishes nothing.
 on:
@@ -16,19 +17,16 @@ jobs:
   checks:
     uses: ./.github/workflows/ci.yml
 
-  publish:
+  # One job creates the release so the two platform builds below only upload
+  # into it.
+  release:
     needs: checks
     if: startsWith(github.ref, 'refs/tags/v')
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
-        with:
-          node-version: '22'
-          cache: npm
-      - run: npm ci
       # The tag must match the app version, or the updater compares the wrong
       # numbers.
       - name: Check the tag matches apps/desktop/package.json
@@ -42,9 +40,9 @@ jobs:
           fi
       # Create the release before electron-builder publishes into it. Without
       # this, electron-builder runs one publisher per file, each finds no
-      # release and makes its own, and the installer and latest.yml end up in
-      # two releases on one tag. With the release in place, each publisher only
-      # uploads. `|| true` keeps a rerun working when the release exists.
+      # release and makes its own, and the files end up in several releases on
+      # one tag. With the release in place, each publisher only uploads.
+      # `|| true` keeps a rerun working when the release exists.
       #
       # The notes come from this version's UPDATES.md entry. electron-updater
       # shows them in the app's update prompt, so a release without them fails.
@@ -65,11 +63,30 @@ jobs:
           gh release create "$tag" --title "$tag" --notes "$notes" || true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      # Uploads RE-BORN-Setup.exe, its .blockmap, and latest.yml to that release.
+
+  publish:
+    name: Publish (${{ matrix.os }})
+    needs: release
+    strategy:
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      # Windows uploads RE-BORN-Setup.exe, its .blockmap, and latest.yml;
+      # Linux uploads RE-BORN-x86_64.AppImage and latest-linux.yml.
       - name: Build and publish
         run: npm run release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Optional code signing. Without these secrets the installer is unsigned.
+          # Optional Windows code signing. Without these secrets the installer
+          # is unsigned. Linux builds ignore them.
           CSC_LINK: ${{ secrets.WINDOWS_CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.WINDOWS_CSC_KEY_PASSWORD }}

@@ -199,6 +199,9 @@ class Server:
 
         ctx = JobContext(event, report, throttle_seconds=self._throttle)
         acquired = False
+        # The final reply goes out after the job leaves self._jobs, so a cancel
+        # sent in response to it already finds the job gone.
+        reply: Callable[[], None]
         try:
             while not acquired:
                 if event.is_set():
@@ -211,20 +214,24 @@ class Server:
                 json.dumps(payload, allow_nan=False)
             except (TypeError, ValueError) as error:
                 raise SidecarError('backend_error', f'The {self._backend.name} backend returned a result that is not JSON: {error}') from error
-            self.send(payload)
+            reply = lambda: self.send(payload)  # noqa: E731
         except SidecarError as error:
-            self.send_error(request_id, error.code, error.message)
+            code, message = error.code, error.message
+            reply = lambda: self.send_error(request_id, code, message)  # noqa: E731
         except Exception as error:  # A backend crash must not kill the sidecar.
             log.error('Backend %s failed in %s: %s', self._backend.name, method, traceback.format_exc())
-            self.send_error(request_id, 'backend_error', f'{type(error).__name__}: {error}')
+            message = f'{type(error).__name__}: {error}'
+            reply = lambda: self.send_error(request_id, 'backend_error', message)  # noqa: E731
         except BaseException as error:  # noqa: B036 - SystemExit/KeyboardInterrupt raised inside a backend.
             log.error('Backend %s aborted in %s: %r', self._backend.name, method, error)
-            self.send_error(request_id, 'backend_error', f'The backend aborted with {type(error).__name__}.')
+            message = f'The backend aborted with {type(error).__name__}.'
+            reply = lambda: self.send_error(request_id, 'backend_error', message)  # noqa: E731
         finally:
             if acquired:
                 self._slots.release()
             with self._jobs_lock:
                 self._jobs.pop(request_id, None)
+        reply()
 
     def close(self) -> None:
         """Cancel running jobs and give them a short grace period to stop."""

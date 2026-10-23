@@ -1,4 +1,6 @@
-# Windows desktop packaging.
+# Desktop packaging: an NSIS installer for Windows and an AppImage for Linux.
+# electron-builder builds for the platform it runs on; the release workflow
+# runs it on both.
 # Signing: set CSC_LINK (path or base64 of a .pfx) and CSC_KEY_PASSWORD to sign;
 # without them the installer is built unsigned.
 appId: ai.dawid.reborn
@@ -41,6 +43,21 @@ win:
   # bundle, whose symlinks fail to extract without Developer Mode. The build
   # is unsigned, so turn this back on when CSC_LINK signing is set up.
   verifyUpdateCodeSignature: false
+linux:
+  target:
+    - target: AppImage
+      arch: [x64]
+  icon: build/icon.png
+  category: AudioVideo
+  executableName: re-born
+  # Matches desktopName in package.json, so the window gets the menu entry's
+  # name and icon.
+  syncDesktopName: true
+  # No version in the name, so the README can link
+  # releases/latest/download/RE-BORN-x86_64.AppImage. latest-linux.yml names
+  # this file, so the updater still finds it. electron-updater can replace an
+  # AppImage in place, which is why Linux ships as one.
+  artifactName: RE-BORN-x86_64.${ext}
 nsis:
   oneClick: false
   perMachine: false

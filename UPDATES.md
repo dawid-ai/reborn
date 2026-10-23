@@ -2,6 +2,14 @@
 
 Releases of the RE:BORN desktop app, newest first. The release workflow publishes each entry as the GitHub release notes, and the app shows them when it offers the update.
 
+## v2.3.0 — 2026-10-23
+
+- **New:** RE:BORN runs on Linux. Download `RE-BORN-x86_64.AppImage` from the releases page, make it executable, and run it; it updates itself like the Windows app. AppImages need FUSE 2 (`fuse2` on Arch, `libfuse2t64` on Ubuntu). **Help** > **Install Command-Line Tool** puts the `reborn` command in `~/.local/bin`.
+- **Preview** on an agent proposal now plays the picked edits, so you hear them before applying. It starts off; the project doesn't change until you click **Apply**.
+- Each change in a proposal says what it does, for example **Tempo 124 → 130 BPM** or **Adds a clip on Wave at bar 5**.
+- When a change bundles several edits, click its **edits** line to pick them one by one. If the picked edits depend on one you left out, the card says so and **Apply** stays off.
+- Fixed: cancelling an analysis just as it finished could report it as cancelled.
+
 ## v2.2.1 — 2026-10-22
 
 - Fixed: a long request from the Director pushed the video preview, the **Looks, library, footage** drawer, the approve button, and the export buttons off the screen.

@@ -2,6 +2,7 @@ import { useSyncExternalStore } from 'react'
 import { studio } from '@reborn/studio-core'
 import { StudioEngine, type TransportSnapshot } from '@reborn/audio-engine/studio'
 import { fetchAssetBytes, putAsset } from '../platform/assetStore'
+import { previewProject } from '../state/proposals'
 import { type DispatchOptions, dispatch, getState, setState, subscribe, toast } from '../state/store'
 
 type StudioProject = studio.StudioProject
@@ -25,8 +26,10 @@ let lastProject: StudioProject | null = null
 const loading = new Set<string>()
 const failed = new Set<string>()
 
+// While a proposal is previewed, playback uses the project with its picked
+// changes, so you hear them before applying.
 subscribe(() => {
-  const { project } = getState()
+  const project = previewProject() ?? getState().project
   if (project === lastProject) return
   lastProject = project
   engine.setProject(project)

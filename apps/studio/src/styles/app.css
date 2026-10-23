@@ -452,6 +452,13 @@ kbd { font: 500 10px var(--mono); color: var(--text-3); padding: 1px 4px; border
 .change-diff s { color: var(--text-3); }
 .change-diff b { color: var(--amber); font-weight: 600; }
 .change-evidence { font-size: 11.5px; color: var(--text-2); }
+.change-effect { display: grid; gap: 1px; font: 11.5px var(--mono); color: var(--amber); }
+.change-effect-error { color: var(--red); font-family: inherit; }
+.change-expand { display: inline-flex; align-items: center; gap: 4px; margin: 4px 0 0 8px; padding: 2px 4px; border: 0; background: none; color: var(--text-2); font-size: 11.5px; cursor: pointer; }
+.change-expand:hover { color: var(--text); }
+.change-commands { list-style: none; margin: 4px 0 0 18px; padding: 0; display: grid; gap: 4px; }
+.changes .change-commands li label { padding: 5px 8px; }
+.proposal-error { margin: 0; font-size: 12px; color: var(--red); }
 .proposal-actions { display: flex; flex-wrap: wrap; gap: 6px; }
 
 /* Status, tasks, palette ------------------------------------------------- */

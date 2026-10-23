@@ -1,5 +1,5 @@
-import { Check, Eye, EyeOff, PanelRight, Play, Printer, Sparkles, Split, Square, Trash2, Unlink, X } from 'lucide-react'
-import { type CSSProperties, type ReactNode, useState } from 'react'
+import { Check, ChevronDown, ChevronRight, Eye, EyeOff, PanelRight, Play, Printer, Sparkles, Split, Square, Trash2, Unlink, X } from 'lucide-react'
+import { type CSSProperties, type ReactNode, useMemo, useState } from 'react'
 import { studio } from '@reborn/studio-core'
 import { engine } from '../audio/host'
 import { separateStems, useIsmail } from '../audio/ismail'
@@ -9,8 +9,9 @@ import { recordParamMove } from '../state/record'
 import { splitSelectedClip, toggleClipLoop } from '../state/clipActions'
 import { MAX_LOUDNESS, matchLoudness } from '../audio/loudness'
 import { modifiers } from '../state/modifiers'
-import { applyProposal, isPicked, rejectProposal, togglePick, usePreview } from '../state/proposals'
-import { type Selection, dispatch, getState, select, setPrefs, setState, useStudio } from '../state/store'
+import { applyProposal, changePick, checkProposal, isCommandPicked, pickedCommands, rejectProposal, toggleChange, toggleCommand, totalCommands, usePreview } from '../state/proposals'
+import { describeCommands } from '../state/proposalDiff'
+import { type Proposal, type Selection, dispatch, getState, select, setPrefs, setState, useStudio } from '../state/store'
 import { VideoBoardPanel, VideoScenePanel, VideoTextPanel } from './VideoInspector'
 import { launchScene } from './Build'
 import { Knob, MuteIcon, Slider, Toggle } from './Controls'
@@ -879,66 +880,137 @@ function ProjectPanel() {
 
 function Proposals() {
   const proposals = useStudio((s) => s.proposals)
-  const preview = useStudio((s) => s.previewProposal)
-  useStudio((s) => s.proposalPicks)
   const pending = proposals.filter((p) => p.status === 'pending')
   if (!pending.length) return null
   return (
     <>
-      {pending.map((proposal) => {
-        const picked = proposal.changes.filter((c) => isPicked(proposal.id, c.id)).length
-        const previewing = preview === proposal.id
-        return (
-          <section key={proposal.id} className="proposal" aria-label="Agent proposal">
-            <header>
-              <Sparkles size={14} />
-              <strong>{proposal.source === 'mcp' ? 'External agent' : 'Agent'} proposal</strong>
-              <span className="pending-tag">Pending</span>
-            </header>
-            {proposal.request && <p className="proposal-request">“{proposal.request}”</p>}
-            <p className="proposal-intent">{proposal.intent}</p>
-            {proposal.evidence.length > 0 && (
-              <ul className="evidence">
-                {proposal.evidence.map((e, i) => (
-                  <li key={i}>{e}</li>
-                ))}
-              </ul>
-            )}
-            <ul className="changes">
-              {proposal.changes.map((change) => {
-                const on = isPicked(proposal.id, change.id)
-                return (
-                  <li key={change.id} className={on ? 'is-on' : ''}>
-                    <label>
-                      <input type="checkbox" checked={on} onChange={() => togglePick(proposal.id, change.id)} />
-                      <span className="change-body">
-                        <strong>{change.summary}</strong>
-                        <span className="change-evidence">{change.detail}</span>
-                      </span>
-                    </label>
-                  </li>
-                )
-              })}
-            </ul>
-            <div className="proposal-actions">
-              <button type="button" className={`chip-btn${previewing ? ' is-on' : ''}`} aria-pressed={previewing} onClick={() => setState({ previewProposal: previewing ? null : proposal.id })}>
-                {previewing ? <Eye size={12} /> : <EyeOff size={12} />}
-                Preview
-              </button>
-              <button type="button" className="chip-btn primary" disabled={!picked} onClick={() => applyProposal(proposal.id)}>
-                <Check size={12} />
-                {picked === proposal.changes.length ? 'Apply all' : `Apply ${picked} selected`}
-              </button>
-              <button type="button" className="chip-btn" onClick={() => rejectProposal(proposal.id)}>
-                <X size={12} />
-                Reject
-              </button>
-            </div>
-            {proposal.revision !== getState().project.revision && <p className="muted small">The project changed since this was proposed; changes apply to the current version.</p>}
-          </section>
-        )
-      })}
+      {pending.map((proposal) => (
+        <ProposalCard key={proposal.id} proposal={proposal} />
+      ))}
     </>
+  )
+}
+
+function ProposalCard({ proposal }: { proposal: Proposal }) {
+  const project = useStudio((s) => s.project)
+  const previewing = useStudio((s) => s.previewProposal === proposal.id)
+  useStudio((s) => s.proposalPicks)
+  const [open, setOpen] = useState<Record<string, boolean>>({})
+  // What each command does, in order, against the current project.
+  const effects = useMemo(() => {
+    const all = describeCommands(project, proposal.changes.flatMap((c) => c.commands))
+    let at = 0
+    return Object.fromEntries(proposal.changes.map((c) => [c.id, all.slice(at, (at += c.commands.length))]))
+  }, [project, proposal])
+  const picked = pickedCommands(proposal).length
+  const total = totalCommands(proposal)
+  const check = checkProposal(proposal)
+  return (
+    <section className="proposal" aria-label="Agent proposal">
+      <header>
+        <Sparkles size={14} />
+        <strong>{proposal.source === 'mcp' ? 'External agent' : 'Agent'} proposal</strong>
+        <span className="pending-tag">Pending</span>
+      </header>
+      {proposal.request && <p className="proposal-request">“{proposal.request}”</p>}
+      <p className="proposal-intent">{proposal.intent}</p>
+      {proposal.evidence.length > 0 && (
+        <ul className="evidence">
+          {proposal.evidence.map((e, i) => (
+            <li key={i}>{e}</li>
+          ))}
+        </ul>
+      )}
+      <ul className="changes">
+        {proposal.changes.map((change) => {
+          const state = changePick(proposal.id, change)
+          const lines = effects[change.id] ?? []
+          const several = change.commands.length > 1
+          const expanded = open[change.id] ?? false
+          return (
+            <li key={change.id} className={state === 'none' ? '' : 'is-on'}>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={state === 'all'}
+                  ref={(el) => {
+                    if (el) el.indeterminate = state === 'some'
+                  }}
+                  onChange={() => toggleChange(proposal.id, change)}
+                />
+                <span className="change-body">
+                  <strong>{change.summary}</strong>
+                  {change.detail && <span className="change-evidence">{change.detail}</span>}
+                  {!several && lines[0] && <ChangeEffect lines={lines[0].lines} error={lines[0].error} />}
+                </span>
+              </label>
+              {several && (
+                <>
+                  <button type="button" className="change-expand" aria-expanded={expanded} onClick={() => setOpen((o) => ({ ...o, [change.id]: !expanded }))}>
+                    {expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+                    {state === 'some' ? `${change.commands.filter((_, i) => isCommandPicked(proposal.id, change.id, i)).length} of ${change.commands.length} edits` : `${change.commands.length} edits`}
+                  </button>
+                  {expanded && (
+                    <ul className="change-commands">
+                      {change.commands.map((_, i) => {
+                        const on = isCommandPicked(proposal.id, change.id, i)
+                        return (
+                          <li key={i} className={on ? 'is-on' : ''}>
+                            <label>
+                              <input type="checkbox" checked={on} onChange={() => toggleCommand(proposal.id, change.id, i)} />
+                              <ChangeEffect lines={lines[i]?.lines ?? []} error={lines[i]?.error ?? null} />
+                            </label>
+                          </li>
+                        )
+                      })}
+                    </ul>
+                  )}
+                </>
+              )}
+            </li>
+          )
+        })}
+      </ul>
+      {check.error && (
+        <p className="proposal-error" role="alert">
+          The picked edits don’t work together: {check.error}
+        </p>
+      )}
+      <div className="proposal-actions">
+        <button
+          type="button"
+          className={`chip-btn${previewing ? ' is-on' : ''}`}
+          aria-pressed={previewing}
+          disabled={!check.project}
+          title="Hear the picked edits and see them as ghost values before applying"
+          onClick={() => setState({ previewProposal: previewing ? null : proposal.id })}
+        >
+          {previewing ? <Eye size={12} /> : <EyeOff size={12} />}
+          {previewing ? 'Previewing' : 'Preview'}
+        </button>
+        <button type="button" className="chip-btn primary" disabled={!picked || Boolean(check.error)} onClick={() => applyProposal(proposal.id)}>
+          <Check size={12} />
+          {picked === total ? 'Apply all' : `Apply ${picked} of ${total}`}
+        </button>
+        <button type="button" className="chip-btn" onClick={() => rejectProposal(proposal.id)}>
+          <X size={12} />
+          Reject
+        </button>
+      </div>
+      {previewing && check.project && <p className="muted small">Playback uses the picked edits, and knobs and faders show them as ghost values. Nothing changes until you apply.</p>}
+      {proposal.revision !== project.revision && <p className="muted small">The project changed since this was proposed; changes apply to the current version.</p>}
+    </section>
+  )
+}
+
+function ChangeEffect({ lines, error }: { lines: string[]; error: string | null }) {
+  return (
+    <span className="change-effect">
+      {lines.map((line, i) => (
+        <span key={i}>{line}</span>
+      ))}
+      {error && <span className="change-effect-error">{error}</span>}
+    </span>
   )
 }
 
